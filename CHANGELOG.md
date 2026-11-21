@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-20
+
 ### Added
 
 - `LaunchBoxMqtt.Core`: state tracking for game launch/exit (including the
@@ -33,14 +35,5 @@ All notable changes to this project are documented here. The format follows
 - `scripts/release.sh`: tags and publishes a release, then re-downloads the
   assets to check them.
 
-### Fixed
-
-- TLS with a private CA failed when the broker certificate is issued by an
-  intermediate (the presented intermediates are now used to build the chain),
-  and the log now says why a certificate was rejected.
-- Stopping during an in-flight publish (BigBox shutdown) was treated as a
-  broker outage: it showed a "cannot reach the broker" notification and
-  disconnected cleanly, which discarded the Last Will, so `offline` was never
-  published.
-- A launch that LaunchBox reports as launched and then exited within seconds
-  (for example a missing ROM) no longer replaces "last played".
+[Unreleased]: https://github.com/dewab74/launchbox-mqtt/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dewab74/launchbox-mqtt/releases/tag/v0.1.0
