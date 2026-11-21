@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The LaunchBox plugin shell. It compiles against LaunchBox's own
+    Unbroken.LaunchBox.Plugins.dll, which is not on NuGet and must not be
+    committed. Resolution order:
+      1. .launchbox-ref/ at the repo root (gitignored; copy the DLL there), or
+      2. $(LaunchBoxDir)\Core, default C:\LaunchBox.
+    Without it the project is skipped with a message, so Core still builds and
+    tests everywhere. Pass -p:RequireLaunchBoxApi=true (the packaging script
+    does) to make a missing DLL an error instead of a skip.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>LaunchBoxMqtt.Plugin</RootNamespace>
+    <AssemblyName>LaunchBoxMqtt.Plugin</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <LaunchBoxDir Condition="'$(LaunchBoxDir)' == ''">C:\LaunchBox</LaunchBoxDir>
+    <LaunchBoxApiDll Condition="'$(LaunchBoxApiDll)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\.launchbox-ref\Unbroken.LaunchBox.Plugins.dll')">$(MSBuildThisFileDirectory)..\..\.launchbox-ref\Unbroken.LaunchBox.Plugins.dll</LaunchBoxApiDll>
+    <LaunchBoxApiDll Condition="'$(LaunchBoxApiDll)' == ''">$(LaunchBoxDir)\Core\Unbroken.LaunchBox.Plugins.dll</LaunchBoxApiDll>
+    <LaunchBoxApiAvailable Condition="Exists('$(LaunchBoxApiDll)')">true</LaunchBoxApiAvailable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LaunchBoxMqtt.Core\LaunchBoxMqtt.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(LaunchBoxApiAvailable)' == 'true'">
+    <!-- Private=false: LaunchBox supplies this assembly at runtime; never ship a copy. -->
+    <Reference Include="Unbroken.LaunchBox.Plugins">
+      <HintPath>$(LaunchBoxApiDll)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(LaunchBoxApiAvailable)' != 'true'">
+    <Compile Remove="**\*.cs" />
+  </ItemGroup>
+
+  <Target Name="ReportLaunchBoxApi" BeforeTargets="CoreCompile">
+    <Error Condition="'$(LaunchBoxApiAvailable)' != 'true' and '$(RequireLaunchBoxApi)' == 'true'"
+           Text="Unbroken.LaunchBox.Plugins.dll not found at '$(LaunchBoxApiDll)'. Copy it from a LaunchBox install into .launchbox-ref/ or set LaunchBoxDir." />
+    <Message Condition="'$(LaunchBoxApiAvailable)' != 'true'" Importance="high"
+             Text="LaunchBoxMqtt.Plugin: SKIPPED (no Unbroken.LaunchBox.Plugins.dll at '$(LaunchBoxApiDll)'). Only Core is built." />
+  </Target>
+
+</Project>

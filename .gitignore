@@ -53,3 +53,6 @@ TestResults/
 *.nupkg
 # LaunchBox's own assemblies are referenced from a local install, never vendored.
 Unbroken.LaunchBox.Plugins.dll
+
+# Local copy of LaunchBox's plugin API for building the plugin shell (never committed).
+.launchbox-ref/

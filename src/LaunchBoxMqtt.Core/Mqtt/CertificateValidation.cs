@@ -22,22 +22,32 @@ public static class CertificateValidation
         return bundle;
     }
 
-    public static bool IsTrusted(X509Certificate? certificate, SslPolicyErrors errors, X509Certificate2Collection? customRoots)
+    /// <summary>
+    /// Whether to trust the broker's certificate. <paramref name="presented"/> is
+    /// the chain the TLS stack built from what the broker sent; its certificates
+    /// supply the intermediates, since the custom root alone cannot reach a leaf
+    /// issued by an intermediate.
+    /// </summary>
+    public static bool IsTrusted(X509Certificate? certificate, X509Chain? presented, SslPolicyErrors errors, X509Certificate2Collection? customRoots) =>
+        Check(certificate, presented, errors, customRoots) is null;
+
+    /// <summary>Null when trusted, otherwise why not, for the log.</summary>
+    public static string? Check(X509Certificate? certificate, X509Chain? presented, SslPolicyErrors errors, X509Certificate2Collection? customRoots)
     {
         if (errors == SslPolicyErrors.None)
         {
-            return true;
+            return null;
         }
 
         if (certificate is null || customRoots is null || customRoots.Count == 0)
         {
-            return false;
+            return $"TLS validation failed ({errors}) and no CA certificate file is configured.";
         }
 
         // A name mismatch or missing certificate is never excused by a custom CA.
         if ((errors & ~SslPolicyErrors.RemoteCertificateChainErrors) != SslPolicyErrors.None)
         {
-            return false;
+            return $"TLS validation failed: {errors}.";
         }
 
         using var leaf = new X509Certificate2(certificate);
@@ -45,6 +55,21 @@ public static class CertificateValidation
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         chain.ChainPolicy.CustomTrustStore.AddRange(customRoots);
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        return chain.Build(leaf);
+        if (presented is not null)
+        {
+            chain.ChainPolicy.ExtraStore.AddRange(presented.ChainPolicy.ExtraStore);
+            foreach (var element in presented.ChainElements)
+            {
+                chain.ChainPolicy.ExtraStore.Add(element.Certificate);
+            }
+        }
+
+        if (chain.Build(leaf))
+        {
+            return null;
+        }
+
+        var status = string.Join(", ", chain.ChainStatus.Select(s => s.Status).Distinct());
+        return $"Broker certificate '{leaf.Subject}' (issuer '{leaf.Issuer}') does not chain to the configured CA: {status}.";
     }
 }

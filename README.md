@@ -14,9 +14,10 @@ state is published when LaunchBox raises an event, not polled.
 
 ## Status
 
-**Early development, not yet released.** The platform-neutral core (state
-tracking, payloads, discovery, MQTT transport) is built and tested. The
-LaunchBox plugin shell and settings UI are next; see
+**Early development, not yet released.** The plugin works end to end on
+LaunchBox/BigBox 14.1.0.5 (tested on a real cabinet against Home Assistant's
+Mosquitto broker over TLS). Setup is through a settings file for now; a
+settings screen inside LaunchBox and the first release are next. See
 [docs/design.md](docs/design.md#milestones).
 
 Not affiliated with or endorsed by Unbroken Software, the makers of LaunchBox.
@@ -98,21 +99,72 @@ minutes.
 ## Install
 
 Not released yet. Releases will be a zip with a SHA256 checksum on the
-[GitHub Releases](https://github.com/dewab74/launchbox-mqtt/releases) page, to
-unpack into `LaunchBox\Plugins\`.
+[GitHub Releases](https://github.com/dewab74/launchbox-mqtt/releases) page.
+Until then, build the zip yourself (see "Development setup"), then:
+
+1. Close LaunchBox and BigBox.
+2. Unpack the zip so the files land in `LaunchBox\Plugins\LaunchBoxMqtt\`.
+3. Start LaunchBox or BigBox once. The plugin writes a starter settings file
+   (below) and does nothing else until you fill it in.
 
 ## Configuration
 
-| Setting | Default | Notes |
+Settings live in
+`LaunchBox\Local\Plugins\.data\LaunchBoxMqtt\files\launchbox-mqtt.json`.
+Edit it, set `"enabled": true`, and restart LaunchBox/BigBox.
+
+```json
+{
+  "enabled": true,
+  "host": "homeassistant.local",
+  "port": 8883,
+  "tls": true,
+  "caCertificatePath": "C:\\LaunchBox\\Local\\Plugins\\.data\\LaunchBoxMqtt\\files\\ca.pem",
+  "username": "launchbox",
+  "password": "<your MQTT password>",
+  "nodeName": "COCKTAIL",
+  "baseTopic": "launchbox",
+  "discoveryPrefix": "homeassistant",
+  "discoveryEnabled": true
+}
+```
+
+| Key | Default | Notes |
 | --- | --- | --- |
-| Broker host | required | |
-| Port | 1883, or 8883 with TLS | |
-| TLS | off | |
-| CA certificate (PEM) | OS trust store | For brokers with a private CA; host name is still checked |
-| Username / password | none | The password is kept in LaunchBox's plugin secret store, not a plain file |
-| Base topic | `launchbox` | |
-| Discovery prefix | `homeassistant` | |
-| Home Assistant discovery | on | |
+| `enabled` | `false` | Nothing connects until this is `true` |
+| `host` | required | Broker host name |
+| `port` | 1883, or 8883 with TLS | |
+| `tls` | `false` | |
+| `caCertificatePath` | OS trust store | PEM file for brokers with a private CA (may hold several certificates). The host name is still checked |
+| `username` / `password` | none | See below |
+| `nodeName` | the PC name | Shown in Home Assistant; normalised into the node id |
+| `baseTopic` | `launchbox` | |
+| `discoveryPrefix` | `homeassistant` | |
+| `discoveryEnabled` | `true` | |
+
+**The password does not stay in the file.** On the next start the plugin moves
+it into LaunchBox's plugin secret store (protected for this Windows machine),
+checks it reads back, and removes it from the file. To change it, write the new
+one into the file again. Keys are case-sensitive, and an unknown key is an
+error rather than being silently ignored.
+
+## Troubleshooting
+
+The plugin keeps its own log next to the settings file:
+`LaunchBox\Local\Plugins\.data\LaunchBoxMqtt\files\launchbox-mqtt.log`
+(one previous file is kept as `.1`). It records start-up, connection problems
+with the reason (for example which certificate failed and why), and every
+LaunchBox event the plugin receives.
+
+- **"does not chain to the configured CA"**: `caCertificatePath` must contain the
+  root (or an intermediate) that issued the broker certificate.
+- **Entities never appear in Home Assistant**: check that `discoveryPrefix`
+  matches Home Assistant's MQTT discovery prefix (default `homeassistant`).
+- **Last played did not change after a very short game**: sessions under 10 s
+  are treated as failed launches (LaunchBox reports a missing ROM as launched,
+  then exited at once) and do not replace the previous session.
+- LaunchBox notifications show connection problems once per outage in
+  LaunchBox; BigBox has no notification system, so there it is log-only.
 
 ## Development setup
 
@@ -128,11 +180,22 @@ per-machine and per-clone. Skipping it means your commits get no linting and no
 credential-leak scanning.
 
 The hooks run gitleaks, detect-secrets, markdownlint,
-`dotnet format --verify-no-changes` and `dotnet build -warnaserror`. Linting
+`dotnet format --verify-no-changes`, `dotnet build -warnaserror`, shellcheck and
+shfmt. Linting
 and secret scanning run at commit time rather than in CI; CI only re-runs the
 same hooks as a backstop, plus build and test.
 
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) or newer.
+
+The plugin project compiles against LaunchBox's own
+`Unbroken.LaunchBox.Plugins.dll`, which is not on NuGet and is never committed.
+Copy it from `<LaunchBox>\Core\` into `.launchbox-ref/` at the repo root
+(gitignored), or set `LAUNCHBOX_DIR`. Without it the plugin project is skipped
+and only Core builds. Then:
+
+```bash
+scripts/package-plugin.sh 0.1.0-dev.1   # -> artifacts/launchbox-mqtt-<version>.zip + .sha256
+```
 
 ## Tests
 

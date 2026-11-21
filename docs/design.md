@@ -1,7 +1,9 @@
 # Design: LaunchBox/BigBox → MQTT plugin
 
-Status: **milestone 1 done** (2026-11-20): repo, baseline, CI, and
-`LaunchBoxMqtt.Core` with tests. Written as a plan on 2026-11-20 and kept
+Status: **milestones 1 and 2 done** (2026-11-20): repo, baseline, CI,
+`LaunchBoxMqtt.Core` with tests, and the plugin shell verified end to end on a
+real cabinet (LaunchBox/BigBox 14.1.0.5 → Home Assistant Mosquitto over TLS →
+discovered entities). Written as a plan on 2026-11-20 and kept
 current here; update it when the design changes.
 
 ## Why
@@ -97,6 +99,50 @@ cannot make the PC run arbitrary programs.
   notification per outage. `StopAsync(timeout)` publishes `offline` and
   disconnects cleanly, giving up after the timeout (the Last Will covers it).
 
+### Plugin shell (milestone 2) and what the real host does
+
+Verified on BigBox 14.1.0.5 on 2026-11-20 (the plugin log records every event):
+
+- **Loading:** a manifest-less plugin is a folder under `LaunchBox\Plugins\`
+  with the DLLs. LaunchBox does **constructor injection** for it:
+  `LaunchBoxMqttPlugin(IPluginFileSystemStore, IPluginLogger, IPluginSecretStore,
+  INotificationManager)` loads fine. (`IPluginPaths` works too but is obsolete.)
+- **Instances:** LaunchBox constructs the entrypoint class **once per plugin
+  interface** (`PluginInitialized` arrives twice), so all state lives in the
+  static `PluginHost`, created once per process.
+- **Data folder:** `IPluginFileSystemStore.RootDirectory` is
+  `LaunchBox\Local\Plugins\.data\LaunchBoxMqtt\files`. The settings file and
+  the log live there.
+- **Secret store** works and persists across restarts (password migrated from
+  the settings file, then read back on the next start with the file
+  password-free).
+- **Events seen:** `PluginInitialized`, `BigBoxStartupCompleted`,
+  `SelectionChanged`, `OnBeforeGameLaunching` → `GameStarting` →
+  `OnAfterGameLaunched` (≈0.8 s later for MAME), `GameExited` →
+  `OnGameExited`, `BigBoxShutdownBeginning`. There is **no attract-mode
+  event**; attract mode (and the lock, as a backstop to its events) is polled
+  from `IStateManager` every 2 s, which caught attract mode on the cabinet.
+- **Failed launches:** contrary to the forum report, a launch with a missing ROM
+  *does* raise `OnAfterGameLaunched` and then `OnGameExited` ≈0.5 s later. So a
+  session shorter than `MinimumSessionLength` (10 s) is not recorded as "last
+  played". The `launching` timeout stays for launches that never report back.
+- **Steam and other launcher-based games:** LaunchBox's own API docs say
+  `OnGameExited` can fire right after launch when the launched process exits
+  (Steam). Such games show as idle within seconds and are not recorded. Fixing
+  that needs a process watch; not planned unless users ask.
+- **Dependencies:** the plugin ships its own `MQTTnet.dll` and
+  `LaunchBoxMqtt.Core.dll`; LaunchBox has no copy of MQTTnet and loads them
+  without conflict. `System.Text.Json` comes from LaunchBox's runtime.
+- **Shutdown:** `BigBoxShutdownBeginning` publishes the final state, then
+  `offline`, then disconnects cleanly (bounded to 2 s). Verified on the wire.
+  A first version treated the publish cancelled by shutdown as a broker outage,
+  disconnected cleanly and so lost the Last Will (fixed, with a test).
+- **Notifications:** `INotificationManager` is unavailable in BigBox (per its
+  docs), so connection problems there are log-only.
+- **TLS:** the homelab broker presents leaf + intermediate. Custom-CA validation
+  must use the intermediates the TLS stack received, not just the leaf (fixed,
+  with a test); rejections now log the reason.
+
 ## Architecture
 
 ```text
@@ -127,10 +173,15 @@ tests/
   (`.gitignore` also blocks it). **There is no public NuGet package** for it
   (checked 2026-11-20: nuget.org search for "launchbox" and "Unbroken" returns
   nothing, and `unbroken.launchbox.plugins` is not in the flat container). So:
-  - The plugin project (milestone 2) references the DLL from
-    `$(LaunchBoxDir)\Core` (default `C:\LaunchBox`) with `Private=false`, and
-    is only added to the build when that file exists, so Core still builds and
-    tests everywhere.
+  - The plugin project references the DLL with `Private=false` from
+    `.launchbox-ref/` at the repo root (gitignored; copy it from a LaunchBox
+    install), else `$(LaunchBoxDir)\Core` (default `C:\LaunchBox`). Without
+    it the project compiles nothing and prints `SKIPPED`, so Core builds and
+    tests everywhere; `-p:RequireLaunchBoxApi=true` (used by
+    `scripts/package-plugin.sh`) makes it an error. It targets `net10.0` and
+    builds on macOS too.
+  - `scripts/package-plugin.sh` fails if any `Unbroken.*` assembly lands in the
+    package.
   - CI builds and tests Core only (Ubuntu and Windows).
   - Releases: either build the plugin zip locally and upload it with its
     checksum, or (to decide in milestone 3) compile in CI against a small
@@ -187,7 +238,7 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 ## Milestones
 
 1. Repo scaffold with the baseline, CI backstop, and Core with tests (no LaunchBox). **Done 2026-11-20.**
-2. Plugin shell: launch/exit events and availability, tested on a real cabinet.
+2. Plugin shell: launch/exit events and availability, tested on a real cabinet. **Done 2026-11-20.**
 3. HA discovery and settings UI with the secret store. Tag v0.1.0.
 4. Reference deployment (above).
 5. v2 commands, opt-in.
@@ -198,12 +249,16 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 - License: MIT.
 - v2 commands: in scope, opt-in and off by default, after v1 (milestone 5).
 
-## Open questions for milestone 2
+## Open questions for milestone 3
 
-- Is there an `ISystemEventsPlugin` event for attract mode and lock, or does the
-  shell poll `IStateManager` on a timer?
-- The Steam quirk: `OnAfterGameLaunched` fires at once because the launcher
-  exits. Does `OnGameExited` then also fire early? If so, a minimum session
-  length or a process watch may be needed. Check on a real install.
-- Does the plugin's own `MQTTnet.dll` load cleanly next to LaunchBox's
-  assemblies (no conflicting copy in `LaunchBox\Core`)?
+- Settings UI: `IPluginConfigurationFormsCapability` is documented as "a
+  capability on an existing plugin component" (schema-version-2 managed
+  components). Check whether LaunchBox shows forms for a manifest-less plugin,
+  or whether a manifest is needed. Keep the settings file either way: it is the
+  headless setup path.
+- Release build in CI: stub reference assembly vs. local build (see
+  "Reference assembly").
+- If LaunchBox and BigBox run at the same time on one PC, both processes load
+  the plugin with the same MQTT client id and would keep disconnecting each
+  other. Decide: per-process client id with one designated publisher, or
+  document "one at a time".

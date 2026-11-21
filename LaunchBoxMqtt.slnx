@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/LaunchBoxMqtt.Core/LaunchBoxMqtt.Core.csproj" />
+    <Project Path="src/LaunchBoxMqtt.Plugin/LaunchBoxMqtt.Plugin.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/LaunchBoxMqtt.Core.Tests/LaunchBoxMqtt.Core.Tests.csproj" />

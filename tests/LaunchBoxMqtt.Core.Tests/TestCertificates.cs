@@ -16,6 +16,19 @@ internal static class TestCertificates
         return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
     }
 
+    /// <summary>An intermediate CA signed by <paramref name="root"/>, with its private key.</summary>
+    public static X509Certificate2 CreateIntermediate(X509Certificate2 root, string name)
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest($"CN={name}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
+        request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
+        using var publicOnly = request.Create(root, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(20), RandomNumberGenerator.GetBytes(16));
+        using var withKey = publicOnly.CopyWithPrivateKey(key);
+        return X509CertificateLoader.LoadPkcs12(withKey.Export(X509ContentType.Pkcs12), null);
+    }
+
     /// <summary>A server certificate for <paramref name="dnsName"/> signed by <paramref name="ca"/>, with its private key.</summary>
     public static X509Certificate2 CreateServer(X509Certificate2 ca, string dnsName)
     {

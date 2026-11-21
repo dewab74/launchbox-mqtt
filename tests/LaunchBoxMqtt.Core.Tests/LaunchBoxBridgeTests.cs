@@ -16,6 +16,7 @@ public sealed class LaunchBoxBridgeTests : IAsyncDisposable
     {
         TickInterval = TimeSpan.FromMilliseconds(20),
         LaunchTimeout = TimeSpan.FromMilliseconds(200),
+        MinimumSessionLength = TimeSpan.Zero,
         BackoffFactory = () => new ReconnectBackoff(TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(40)),
     };
 
@@ -161,6 +162,27 @@ public sealed class LaunchBoxBridgeTests : IAsyncDisposable
         var last = _transport.Published.Last();
         Assert.Equal(AvailabilityTopic, last.Topic);
         Assert.Equal(Availability.Offline, last.Payload);
+        Assert.False(_transport.IsConnected);
+    }
+
+    [Fact]
+    public async Task Stop_during_an_in_flight_publish_still_ends_offline_without_alarming_the_user()
+    {
+        // BigBox shutdown: the "BigBox stopped" state change and Stop race, and MQTTnet reports the
+        // cancelled publish as a timeout. That must not count as a broker outage, and the last
+        // retained availability must be offline (a clean disconnect discards the Last Will).
+        Start();
+        await Connected();
+        _transport.NextPublishGate = new TaskCompletionSource();
+        _bridge!.OnBigBoxRunningChanged(true);
+        await Eventually.True(() => Volatile.Read(ref _transport.PendingPublishes) == 1, "publish in flight");
+
+        await _bridge.StopAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Empty(_log.Notifications);
+        var availability = _transport.Published.Last(m => m.Topic == AvailabilityTopic);
+        Assert.Equal(Availability.Offline, availability.Payload);
+        Assert.True(LatestState()!.Value.GetProperty("bigbox_running").GetBoolean(), "final state flushed before offline");
         Assert.False(_transport.IsConnected);
     }
 

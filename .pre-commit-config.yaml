@@ -85,6 +85,22 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
 
+  # ---- Bash / shell ------------------------------------------------------
+  # shellcheck-py rather than koalaman/shellcheck-precommit: the latter runs
+  # through Docker, which makes commits fail on any machine without a running
+  # daemon. This one ships a wheel and just works.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning, --external-sources]
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.13.1-1
+    hooks:
+      - id: shfmt
+        args: [--write, --indent=2, --case-indent, --binary-next-line]
+
   # ---- C# / .NET ---------------------------------------------------------
   # Local hooks: they run the SDK pinned by global.json, so the hook and a
   # plain `dotnet build` can never disagree. Needs the .NET 10+ SDK on PATH.

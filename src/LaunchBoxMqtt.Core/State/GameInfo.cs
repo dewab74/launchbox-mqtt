@@ -23,4 +23,10 @@ public sealed record GameInfo
     public int? ReleaseYear { get; init; }
 
     public int? PlayCount { get; init; }
+
+    /// <summary>Splits LaunchBox's <c>GenresString</c> ("Shooter; Arcade") into trimmed, distinct genres.</summary>
+    public static IReadOnlyList<string> SplitGenres(string? genres) =>
+        string.IsNullOrWhiteSpace(genres)
+            ? []
+            : [.. genres.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase)];
 }

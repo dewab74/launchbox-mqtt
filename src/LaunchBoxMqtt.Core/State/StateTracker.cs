@@ -59,11 +59,19 @@ public sealed class StateTracker
 
     /// <summary>
     /// The running game exited. A session is recorded only if the game was
-    /// confirmed running; an exit straight from <see cref="PlayState.Launching"/>
-    /// is a failed launch.
+    /// confirmed running for at least <paramref name="minimumSession"/>: an exit
+    /// straight from <see cref="PlayState.Launching"/>, or seconds after the
+    /// launch, is a failed launch (LaunchBox reports a missing ROM as launched,
+    /// then exited), and must not replace the real last session.
     /// </summary>
-    public bool GameExited()
+    public bool GameExited(TimeSpan minimumSession = default) => GameExited(minimumSession, out _);
+
+    /// <inheritdoc cref="GameExited(TimeSpan)"/>
+    /// <param name="minimumSession">Shorter sessions are not recorded.</param>
+    /// <param name="discardedLength">Set when a confirmed session was too short to record.</param>
+    public bool GameExited(TimeSpan minimumSession, out TimeSpan? discardedLength)
     {
+        discardedLength = null;
         lock (_gate)
         {
             _launchRequestedAt = null;
@@ -73,14 +81,21 @@ public sealed class StateTracker
             }
 
             var now = _time.GetUtcNow();
+            var session = _current is { CurrentGame: { } g, StartedAt: { } started }
+                ? new LastSession(g, started, now)
+                : null;
+            if (session is not null && session.Length < minimumSession)
+            {
+                discardedLength = session.Length;
+                session = null;
+            }
+
             return Apply(s => s with
             {
                 Activity = PlayState.Idle,
                 CurrentGame = null,
                 StartedAt = null,
-                LastSession = s is { CurrentGame: { } g, StartedAt: { } started }
-                    ? new LastSession(g, started, now)
-                    : s.LastSession,
+                LastSession = session ?? s.LastSession,
             });
         }
     }

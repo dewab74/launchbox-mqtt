@@ -18,6 +18,15 @@ internal sealed class FakeTransport : IMqttTransport
     /// <summary>When set, every publish waits on it: simulates a hung broker.</summary>
     public TaskCompletionSource? PublishGate { get; set; }
 
+    /// <summary>
+    /// When set, the next publish waits on it. If that publish is cancelled it
+    /// throws a non-cancellation exception, as MQTTnet does (it reports a
+    /// cancelled publish as MqttCommunicationTimedOutException).
+    /// </summary>
+    public TaskCompletionSource? NextPublishGate { get; set; }
+
+    public int PendingPublishes;
+
     public bool IsConnected => _connected;
 
     public Task ConnectAsync(CancellationToken cancellationToken)
@@ -35,6 +44,24 @@ internal sealed class FakeTransport : IMqttTransport
 
     public async Task PublishAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
+        if (NextPublishGate is { } once)
+        {
+            NextPublishGate = null;
+            Interlocked.Increment(ref PendingPublishes);
+            try
+            {
+                await once.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("The operation has timed out. (fake, like MQTTnet)");
+            }
+            finally
+            {
+                Interlocked.Decrement(ref PendingPublishes);
+            }
+        }
+
         if (PublishGate is { } gate)
         {
             await gate.Task.WaitAsync(cancellationToken);

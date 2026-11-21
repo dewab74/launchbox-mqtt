@@ -22,7 +22,21 @@ public sealed class CertificateValidationTests : IDisposable
     {
         using var server = TestCertificates.CreateServer(_ca, "broker.test");
         var roots = CertificateValidation.LoadCaBundle(TestCertificates.WritePem(_dir, _ca));
-        Assert.True(CertificateValidation.IsTrusted(server, SslPolicyErrors.RemoteCertificateChainErrors, roots));
+        Assert.True(CertificateValidation.IsTrusted(server, null, SslPolicyErrors.RemoteCertificateChainErrors, roots));
+    }
+
+    [Fact]
+    public void Intermediate_sent_by_the_server_completes_the_chain()
+    {
+        // step-ca and most private CAs issue leaves from an intermediate; the broker sends leaf + intermediate.
+        using var intermediate = TestCertificates.CreateIntermediate(_ca, "Test Intermediate CA");
+        using var server = TestCertificates.CreateServer(intermediate, "broker.test");
+        var roots = CertificateValidation.LoadCaBundle(TestCertificates.WritePem(_dir, _ca));
+        using var presented = new X509Chain();
+        presented.ChainPolicy.ExtraStore.Add(intermediate);
+
+        Assert.True(CertificateValidation.IsTrusted(server, presented, SslPolicyErrors.RemoteCertificateChainErrors, roots));
+        Assert.False(CertificateValidation.IsTrusted(server, null, SslPolicyErrors.RemoteCertificateChainErrors, roots));
     }
 
     [Fact]
@@ -30,7 +44,7 @@ public sealed class CertificateValidationTests : IDisposable
     {
         using var server = TestCertificates.CreateServer(_otherCa, "broker.test");
         var roots = CertificateValidation.LoadCaBundle(TestCertificates.WritePem(_dir, _ca));
-        Assert.False(CertificateValidation.IsTrusted(server, SslPolicyErrors.RemoteCertificateChainErrors, roots));
+        Assert.False(CertificateValidation.IsTrusted(server, null, SslPolicyErrors.RemoteCertificateChainErrors, roots));
     }
 
     [Fact]
@@ -39,19 +53,19 @@ public sealed class CertificateValidationTests : IDisposable
         using var server = TestCertificates.CreateServer(_ca, "broker.test");
         var roots = CertificateValidation.LoadCaBundle(TestCertificates.WritePem(_dir, _ca));
         var errors = SslPolicyErrors.RemoteCertificateChainErrors | SslPolicyErrors.RemoteCertificateNameMismatch;
-        Assert.False(CertificateValidation.IsTrusted(server, errors, roots));
+        Assert.False(CertificateValidation.IsTrusted(server, null, errors, roots));
     }
 
     [Fact]
     public void Chain_errors_without_a_custom_ca_are_rejected()
     {
         using var server = TestCertificates.CreateServer(_ca, "broker.test");
-        Assert.False(CertificateValidation.IsTrusted(server, SslPolicyErrors.RemoteCertificateChainErrors, null));
+        Assert.False(CertificateValidation.IsTrusted(server, null, SslPolicyErrors.RemoteCertificateChainErrors, null));
     }
 
     [Fact]
     public void Clean_os_validation_passes_through() =>
-        Assert.True(CertificateValidation.IsTrusted(null, SslPolicyErrors.None, null));
+        Assert.True(CertificateValidation.IsTrusted(null, null, SslPolicyErrors.None, null));
 
     [Fact]
     public void Bundle_with_several_certificates_loads_all()

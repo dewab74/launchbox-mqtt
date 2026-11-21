@@ -66,6 +66,36 @@ public class StateTrackerTests
     }
 
     [Fact]
+    public void Launch_that_dies_at_once_does_not_replace_the_last_session()
+    {
+        // Seen on a real cabinet: a missing ROM is reported as launched, then exited 0.5 s later.
+        var tracker = new StateTracker(_time);
+        tracker.GameLaunched(TestGames.Galaga);
+        _time.Advance(TimeSpan.FromMinutes(5));
+        tracker.GameExited(TimeSpan.FromSeconds(10));
+
+        tracker.GameLaunching(TestGames.PacMan);
+        tracker.GameLaunched(TestGames.PacMan);
+        _time.Advance(TimeSpan.FromMilliseconds(500));
+        Assert.True(tracker.GameExited(TimeSpan.FromSeconds(10), out var discarded));
+
+        Assert.Equal(PlayState.Idle, tracker.Current.Activity);
+        Assert.Equal(TestGames.Galaga, tracker.Current.LastSession?.Game);
+        Assert.Equal(TimeSpan.FromMilliseconds(500), discarded);
+    }
+
+    [Fact]
+    public void Session_at_the_minimum_is_recorded()
+    {
+        var tracker = new StateTracker(_time);
+        tracker.GameLaunched(TestGames.Galaga);
+        _time.Advance(TimeSpan.FromSeconds(10));
+        tracker.GameExited(TimeSpan.FromSeconds(10), out var discarded);
+        Assert.Null(discarded);
+        Assert.Equal(TestGames.Galaga, tracker.Current.LastSession?.Game);
+    }
+
+    [Fact]
     public void Unconfirmed_launch_expires_after_the_timeout()
     {
         var tracker = new StateTracker(_time);

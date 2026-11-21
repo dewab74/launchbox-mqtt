@@ -22,8 +22,12 @@ Thanks for helping. Issues and pull requests are welcome.
    ```
 
 `LaunchBoxMqtt.Core` and its tests build on Windows, macOS and Linux. The
-LaunchBox plugin project needs a local LaunchBox install on Windows; see
-[docs/design.md](docs/design.md#reference-assembly).
+plugin project also builds on any OS once LaunchBox's
+`Unbroken.LaunchBox.Plugins.dll` is in `.launchbox-ref/` (copied from
+`<LaunchBox>\Core\`; gitignored, never commit it). Without it the plugin
+project is skipped and only Core builds; see
+[docs/design.md](docs/design.md#reference-assembly). Package with
+`scripts/package-plugin.sh <version>`.
 
 ## Rules
 

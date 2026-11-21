@@ -152,8 +152,9 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         });
         _cleanup.Add(transport);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => transport.ConnectAsync(CancellationToken.None));
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => transport.ConnectAsync(CancellationToken.None));
         Assert.False(transport.IsConnected);
+        Assert.Contains("does not chain to the configured CA", ex.Message, StringComparison.Ordinal);
     }
 
     private static int DiscoveryBuilderCount => Discovery.DiscoveryBuilder.Entities.Count;

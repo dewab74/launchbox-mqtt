@@ -85,7 +85,18 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
 
     public void OnGameLaunched(GameInfo game) => Mutate(() => _tracker.GameLaunched(game), nameof(OnGameLaunched));
 
-    public void OnGameExited() => Mutate(_tracker.GameExited, nameof(OnGameExited));
+    public void OnGameExited() => Mutate(
+        () =>
+        {
+            var changed = _tracker.GameExited(_options.MinimumSessionLength, out var discarded);
+            if (discarded is { } length)
+            {
+                _log.Log(BridgeLogLevel.Info, $"Game exited after {length.TotalSeconds:0.#} s; treated as a failed launch, not recorded as last played.");
+            }
+
+            return changed;
+        },
+        nameof(OnGameExited));
 
     public void OnBigBoxRunningChanged(bool running) => Mutate(() => _tracker.SetBigBoxRunning(running), nameof(OnBigBoxRunningChanged));
 
@@ -122,6 +133,8 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
 
         try
         {
+            // Flush the last state (often "BigBox stopped") that the cancelled loop may not have sent.
+            await PublishStateAsync(deadline.Token).ConfigureAwait(false);
             await _transport.PublishAsync(new OutboundMessage(_availabilityTopic, Availability.Offline, Retain: true), deadline.Token).ConfigureAwait(false);
             await _transport.DisconnectAsync(deadline.Token).ConfigureAwait(false);
             _log.Log(BridgeLogLevel.Info, "MQTT bridge stopped.");
@@ -199,8 +212,10 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
                     }
                 }
             }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            catch (Exception) when (stop.IsCancellationRequested)
             {
+                // Stopping. MQTTnet reports a cancelled publish as a timeout, so any exception counts
+                // here; treating it as an outage would disconnect cleanly and discard the Last Will.
                 break;
             }
 #pragma warning disable CA1031 // Any broker failure is retried; the loop must not die.

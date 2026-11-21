@@ -20,6 +20,7 @@ public sealed class MqttNetTransport : IMqttTransport
     private readonly X509Certificate2Collection? _caBundle;
     private readonly IMqttClient _client;
     private MqttProtocolVersion _protocol = MqttProtocolVersion.V500;
+    private string? _lastTlsRejection;
 
     public MqttNetTransport(BridgeSettings settings)
     {
@@ -38,6 +39,20 @@ public sealed class MqttNetTransport : IMqttTransport
     public MqttProtocolVersion NegotiatedProtocol => _protocol;
 
     public async Task ConnectAsync(CancellationToken cancellationToken)
+    {
+        _lastTlsRejection = null;
+        try
+        {
+            await ConnectAnyProtocolAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (_lastTlsRejection is { } reason && ex is not OperationCanceledException)
+        {
+            // MQTTnet only says "rejected by the callback"; say why.
+            throw new InvalidOperationException(reason, ex);
+        }
+    }
+
+    private async Task ConnectAnyProtocolAsync(CancellationToken cancellationToken)
     {
         if (await TryConnectAsync(_protocol, cancellationToken).ConfigureAwait(false))
         {
@@ -120,7 +135,10 @@ public sealed class MqttNetTransport : IMqttTransport
                 if (caBundle is not null)
                 {
                     tls.WithCertificateValidationHandler(args =>
-                        CertificateValidation.IsTrusted(args.Certificate, args.SslPolicyErrors, caBundle));
+                    {
+                        _lastTlsRejection = CertificateValidation.Check(args.Certificate, args.Chain, args.SslPolicyErrors, caBundle);
+                        return _lastTlsRejection is null;
+                    });
                 }
             });
         }
