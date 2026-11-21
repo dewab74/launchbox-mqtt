@@ -1,6 +1,6 @@
 # Design: LaunchBox/BigBox → MQTT plugin
 
-Status: **milestones 1–3 done** (2026-11-20; v0.1.0 release pending): repo,
+Status: **milestones 1–4 done** (2026-11-20; v0.1.0 released): repo,
 baseline, CI, `LaunchBoxMqtt.Core` with tests, the plugin shell verified end to
 end on a real cabinet (LaunchBox/BigBox 14.1.0.5 → Home Assistant Mosquitto
 over TLS → discovered entities), and a settings window verified on the same
@@ -272,8 +272,10 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 
 1. Repo scaffold with the baseline, CI backstop, and Core with tests (no LaunchBox). **Done 2026-11-20.**
 2. Plugin shell: launch/exit events and availability, tested on a real cabinet. **Done 2026-11-20.**
-3. HA discovery and settings UI with the secret store. Tag v0.1.0. **Done 2026-11-20** (release pending).
-4. Reference deployment (above).
+3. HA discovery and settings UI with the secret store. Tag v0.1.0. **Done 2026-11-20**, released.
+4. Reference deployment (above). **Done 2026-11-20:** v0.1.0 installed by
+   the cabinet's installer (pinned by version and SHA256), Home Assistant's
+   now-playing chip switched to the plugin's entities, the SSH poll removed.
 5. v2 commands, opt-in.
 
 ## Decisions (settled 2026-11-20)
