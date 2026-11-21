@@ -1,6 +1,6 @@
 # Design: LaunchBox/BigBox → MQTT plugin
 
-Status: **milestones 1–4 done** (2026-11-20; v0.1.0 released): repo,
+Status: **milestones 1–5 done** (2026-11-20; v0.1.0 and v0.2.0 released): repo,
 baseline, CI, `LaunchBoxMqtt.Core` with tests, the plugin shell verified end to
 end on a real cabinet (LaunchBox/BigBox 14.1.0.5 → Home Assistant Mosquitto
 over TLS → discovered entities), and a settings window verified on the same
@@ -199,6 +199,38 @@ Verified on BigBox 14.1.0.5 on 2026-11-20 (the plugin log records every event):
   30 s timeout; outcome on `command_result`, not retained), discovery adds a
   button and a text entity, or empties their configs so they disappear.
 
+### Game stats: what LaunchBox exposes (probe, 2026-11-20)
+
+A temporary read-only probe (commit cc60459, removed before v0.2.0) logged
+what the 14.1 services return on the reference cabinet. Inputs for a future
+"game stats" milestone:
+
+- `IAchievementManager` (constructor injection): sources `retroachievements`,
+  `steam`, `gog`. RetroAchievements has an account with hardcore and softcore
+  contexts; supports catalogs, progress and library progress, not availability
+  checks. `GetCachedAsync(IGame)` for a Genesis game returned the RA game
+  (id 54) with `Status: NotLoaded`: nothing cached until `RefreshAsync`, which
+  goes to the network through LaunchBox's rate limits. Arcade games had no
+  association.
+- `ILeaderboardManager`: sources `mame` and `retroachievements`. The `mame`
+  source is keyed by **ROM name** (`gyrussce`), not the LaunchBox game id, and
+  returns community entries with `Rank`, `Score`, `InGameName`, `RecordedAt`
+  (Gyruss top: 448,000). `retroachievements` leaderboards answer
+  `Unsupported` for these games. The player's own MAME rank needs LaunchBox's
+  `UploadMameCommunityHighScores`, which shares scores publicly (off on the
+  reference cabinet).
+- `IPlayerActivityManager`: source `retroachievements`, recent games with
+  recent unlocks (the probe's JSON dump hit a reference cycle in
+  `AdditionalData`; map fields explicitly).
+- No API passes a game *score* to a plugin. MAME's own `hiscore` plugin saves
+  raw `.hi` files (decoding needs hi2txt), out of scope.
+- `EnableMameGameEvents` (LaunchBox setting, off on the reference cabinet)
+  loads LaunchBox's `lbevents` Lua plugin into MAME, which reports
+  `MameGameSessionStarted`, `MameCoinInserted`, `MamePlayerStarted`,
+  `MameGameSessionEnded` (no payload reaches `ISystemEventsPlugin`). Untested
+  with MAME 0.233, and its interaction with MAME's other plugins (hiscore) is
+  unverified.
+
 ## Architecture
 
 ```text
@@ -299,8 +331,10 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 4. Reference deployment (above). **Done 2026-11-20:** v0.1.0 installed by
    the cabinet's installer (pinned by version and SHA256), Home Assistant's
    now-playing chip switched to the plugin's entities, the SSH poll removed.
-5. v2 commands, opt-in. **Implemented 2026-11-20** (exit game, launch game;
-   no Big Box toast: no API).
+5. v2 commands, opt-in. **Done 2026-11-20**, released in v0.2.0 (exit game,
+   launch game; no Big Box toast: no API).
+6. Possible: game stats (RetroAchievements progress, MAME community
+   leaderboard top score, MAME coin/start events). See "Game stats" above.
 
 ## Decisions (settled 2026-11-20)
 
