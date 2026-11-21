@@ -1,0 +1,35 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+    validations:
+      required: true
+  - type: input
+    id: launchbox-version
+    attributes:
+      label: LaunchBox / BigBox version
+      placeholder: "14.1.0.5"
+    validations:
+      required: true
+  - type: input
+    id: broker
+    attributes:
+      label: MQTT broker and version
+      placeholder: "Mosquitto 2.0 (Home Assistant add-on)"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Plugin log
+      description: Remove passwords and host names you do not want public.
+      render: text

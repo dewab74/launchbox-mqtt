@@ -1,0 +1,34 @@
+name: build and test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Core is platform-neutral; Windows is where the plugin actually runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CI: "true"
+      DOTNET_NOLOGO: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Locked mode (CI=true in Directory.Build.props): a stale packages.lock.json fails here.
+      - run: dotnet restore LaunchBoxMqtt.slnx
+
+      - run: dotnet build LaunchBoxMqtt.slnx --no-restore -c Release -warnaserror
+
+      - run: dotnet test --solution LaunchBoxMqtt.slnx --no-build -c Release
