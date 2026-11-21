@@ -16,8 +16,8 @@ state is published when LaunchBox raises an event, not polled.
 
 **Early development.** The plugin works end to end on LaunchBox/BigBox
 14.1.0.5 (tested on a real cabinet against Home Assistant's Mosquitto broker
-over TLS), with a settings window in LaunchBox. Command topics (exit game,
-launch game, BigBox toast) are planned as an opt-in v2. See
+over TLS), with a settings window in LaunchBox and opt-in commands (exit the
+game, launch a game by id). See
 [docs/design.md](docs/design.md#milestones).
 
 Not affiliated with or endorsed by Unbroken Software, the makers of LaunchBox.
@@ -45,6 +45,48 @@ Not affiliated with or endorsed by Unbroken Software, the makers of LaunchBox.
 
 The device shows as unavailable when LaunchBox exits or the PC loses power
 (MQTT Last Will).
+
+With commands enabled (below) two more entities appear: **Exit game** (button)
+and **Launch game (id)** (text; set it to a LaunchBox game id).
+
+## Commands (opt-in)
+
+Off by default. Turn on **Accept commands** in the settings window (or
+`"commandsEnabled": true` in the settings file). Anyone who can publish to this
+PC's command topics can then start and close games, so give the PC its own
+broker account and restrict who may publish to its topics.
+
+| Topic | Payload | Does |
+| --- | --- | --- |
+| `launchbox/<node>/command/launch_game` | a LaunchBox game id (GUID), or `{"id": "<GUID>"}` | Launches that library game through LaunchBox's normal launch, as if picked in Big Box. Refused while a game is running or if the id is not in the library |
+| `launchbox/<node>/command/exit_game` | anything | Asks the running game to close, like Alt+F4, so emulators save as usual. Only processes Big Box started are touched, and nothing is ever killed |
+
+Safety rules:
+
+- A command never carries a path or a command line; only these two exist.
+- **Retained messages are refused**: a retained command would run again on
+  every reconnect. Publish with retain off. (With an MQTT 3.1.1 broker a
+  retained publish still acts once live, since 3.1.1 clears the flag on live
+  delivery; it is never replayed. MQTT 5 brokers keep the flag, so it is
+  refused outright.)
+- At most one command at a time, at least 3 s apart; each must finish within
+  30 s.
+- Every command's outcome is published (not retained) on
+  `launchbox/<node>/command_result`, for example
+  `{"command":"launch_game","accepted":false,"detail":"a game is already playing: Gyruss","at":"…"}`,
+  and written to the plugin log.
+
+Home Assistant example: relaunch the last game.
+
+```yaml
+action: mqtt.publish
+data:
+  topic: launchbox/cocktail/command/launch_game
+  payload: "{{ state_attr('sensor.launchbox_cocktail_last_played', 'id') }}"
+```
+
+A toast in Big Box is not possible with the LaunchBox 14.1 plugin API (its
+notification service is LaunchBox-only), so there is no notify command.
 
 ## Topics
 
@@ -159,6 +201,7 @@ start.
 | `baseTopic` | `launchbox` | |
 | `discoveryPrefix` | `homeassistant` | |
 | `discoveryEnabled` | `true` | |
+| `commandsEnabled` | `false` | Accept commands; see "Commands" |
 
 **The password does not stay in the file.** The settings window never writes
 it there. If you put one in the file, the next start moves

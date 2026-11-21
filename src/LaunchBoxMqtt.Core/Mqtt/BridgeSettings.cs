@@ -37,6 +37,13 @@ public sealed record BridgeSettings
 
     public bool DiscoveryEnabled { get; init; } = true;
 
+    /// <summary>
+    /// Accept commands (exit game, launch game by id) from the broker. Off by
+    /// default: anyone who can publish to the command topics can then start
+    /// games on this PC.
+    /// </summary>
+    public bool CommandsEnabled { get; init; }
+
     public int EffectivePort => Port ?? (UseTls ? DefaultTlsPort : DefaultPort);
 
     public string NodeId => Topics.NodeId.FromName(NodeName);
@@ -96,5 +103,5 @@ public sealed record BridgeSettings
 
     // The password must never reach a log line through record ToString().
     public override string ToString() =>
-        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")}";
+        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")} commands={(CommandsEnabled ? "on" : "off")}";
 }

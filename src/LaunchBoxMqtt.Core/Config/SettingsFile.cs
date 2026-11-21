@@ -31,7 +31,7 @@ public static class SettingsFile
     private static readonly HashSet<string> KnownKeys = new(StringComparer.Ordinal)
     {
         "enabled", "host", "port", "tls", "caCertificatePath", "username", "password",
-        "nodeName", "baseTopic", "discoveryPrefix", "discoveryEnabled", "$comment",
+        "nodeName", "baseTopic", "discoveryPrefix", "discoveryEnabled", "commandsEnabled", "$comment",
     };
 
     /// <summary>Reads and checks the file. Throws <see cref="InvalidDataException"/> with a readable message when it is wrong.</summary>
@@ -70,6 +70,7 @@ public static class SettingsFile
             BaseTopic = String(root, "baseTopic", path) ?? Topics.TopicLayout.DefaultBaseTopic,
             DiscoveryPrefix = String(root, "discoveryPrefix", path) ?? Topics.TopicLayout.DefaultDiscoveryPrefix,
             DiscoveryEnabled = Bool(root, "discoveryEnabled", path) ?? true,
+            CommandsEnabled = Bool(root, "commandsEnabled", path) ?? false,
         };
 
         var password = String(root, "password", path);
@@ -113,6 +114,7 @@ public static class SettingsFile
             ["baseTopic"] = settings.BaseTopic,
             ["discoveryPrefix"] = settings.DiscoveryPrefix,
             ["discoveryEnabled"] = settings.DiscoveryEnabled,
+            ["commandsEnabled"] = settings.CommandsEnabled,
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         WriteAtomically(path, root.ToJsonString(WriteOptions));
@@ -146,6 +148,7 @@ public static class SettingsFile
             ["baseTopic"] = Topics.TopicLayout.DefaultBaseTopic,
             ["discoveryPrefix"] = Topics.TopicLayout.DefaultDiscoveryPrefix,
             ["discoveryEnabled"] = true,
+            ["commandsEnabled"] = false,
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         WriteAtomically(path, template.ToJsonString(WriteOptions));

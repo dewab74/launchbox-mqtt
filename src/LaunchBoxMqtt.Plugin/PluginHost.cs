@@ -11,7 +11,7 @@ using Unbroken.LaunchBox.Plugins.Services.Storage;
 namespace LaunchBoxMqtt.Plugin;
 
 /// <summary>What the plugin was given by LaunchBox at load time.</summary>
-internal sealed record PluginContext(string DataDirectory, PluginLog Log, IPluginSecretStore? Secrets)
+internal sealed record PluginContext(string DataDirectory, PluginLog Log, IPluginSecretStore? Secrets, SynchronizationContext? UiContext)
 {
     public string SettingsPath => Path.Combine(DataDirectory, SettingsFile.FileName);
 }
@@ -53,11 +53,12 @@ internal static class PluginHost
 
             Directory.CreateDirectory(dataDirectory);
             var log = new PluginLog(new FileLog(Path.Combine(dataDirectory, "launchbox-mqtt.log")), logger, notifications);
-            context = new PluginContext(dataDirectory, log, secrets);
+            // LaunchBox constructs plugins on its UI thread; launching a game must happen there.
+            context = new PluginContext(dataDirectory, log, secrets, SynchronizationContext.Current);
             Volatile.Write(ref _context, context);
         }
 
-        context.Log.Log(BridgeLogLevel.Info, $"launchbox-mqtt {Version} loading in {Environment.ProcessPath} (data: {dataDirectory}).");
+        context.Log.Log(BridgeLogLevel.Info, $"launchbox-mqtt {Version} loading in {Environment.ProcessPath} (data: {dataDirectory}, UI context: {context.UiContext?.GetType().Name ?? "none"}).");
 
         // Settings and the secret store are read off the UI thread; LaunchBox callbacks must stay brief.
         _ = Task.Run(() => RunLockedAsync(() => StartAsync(context)));
@@ -213,7 +214,7 @@ internal static class PluginHost
                 return;
             }
 
-            var bridge = new LaunchBoxBridge(settings, new MqttNetTransport(settings), log, Version);
+            var bridge = new LaunchBoxBridge(settings, new MqttNetTransport(settings), log, Version, commands: new LaunchBoxCommandHandler(context.UiContext, log));
             SeedState(bridge);
             bridge.Start();
             Volatile.Write(ref _bridge, bridge);

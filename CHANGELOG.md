@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in commands (`commandsEnabled`, off by default): `launch_game` with a
+  LaunchBox game id, through LaunchBox's own launch, and `exit_game`, which
+  asks the processes Big Box started to close and never kills them. Retained
+  command messages are ignored. One command at a time, at least 3 s apart,
+  30 s timeout. Outcomes are published on `command_result`. With commands on,
+  Home Assistant discovery adds an "Exit game" button and a "Launch game (id)"
+  text entity, and removes them again when commands are turned off.
+- "Accept commands" in the settings window.
+
+### Fixed
+
+- A broker integration test could fail with "Address already in use" when its
+  port was taken between choosing it and binding it.
+
 ## [0.1.0] - 2026-11-20
 
 ### Added

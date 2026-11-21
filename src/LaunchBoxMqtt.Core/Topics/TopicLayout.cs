@@ -35,6 +35,16 @@ public sealed class TopicLayout
 
     public string AvailabilityTopic => $"{BaseTopic}/{Node}/availability";
 
+    /// <summary>Commands arrive on <c>&lt;base&gt;/&lt;node&gt;/command/&lt;name&gt;</c> (only when enabled).</summary>
+    public string CommandTopicPrefix => $"{BaseTopic}/{Node}/command/";
+
+    public string CommandTopic(string name) => CommandTopicPrefix + name;
+
+    public string CommandSubscription => CommandTopicPrefix + "+";
+
+    /// <summary>Outcome of each command, not retained.</summary>
+    public string CommandResultTopic => $"{BaseTopic}/{Node}/command_result";
+
     public string DiscoveryTopic(string component, string objectId) =>
         $"{DiscoveryPrefix}/{component}/{DeviceId}/{objectId}/config";
 

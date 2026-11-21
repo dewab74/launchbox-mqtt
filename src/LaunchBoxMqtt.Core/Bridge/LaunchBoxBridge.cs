@@ -1,8 +1,12 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
+using LaunchBoxMqtt.Core.Commands;
 using LaunchBoxMqtt.Core.Discovery;
 using LaunchBoxMqtt.Core.Mqtt;
 using LaunchBoxMqtt.Core.Payloads;
 using LaunchBoxMqtt.Core.State;
+using LaunchBoxMqtt.Core.Topics;
 
 namespace LaunchBoxMqtt.Core.Bridge;
 
@@ -28,6 +32,10 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
     private readonly DiscoveryBuilder _discovery;
     private readonly string _stateTopic;
     private readonly string _availabilityTopic;
+    private readonly TopicLayout _topics;
+    private readonly ICommandHandler? _commands;
+    private readonly SemaphoreSlim _commandSlot = new(1, 1);
+    private DateTimeOffset _lastCommandAt = DateTimeOffset.MinValue;
     private readonly Channel<byte> _wake = Channel.CreateBounded<byte>(
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
 
@@ -42,7 +50,8 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         IBridgeLog log,
         string version,
         TimeProvider? time = null,
-        BridgeOptions? options = null)
+        BridgeOptions? options = null,
+        ICommandHandler? commands = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(transport);
@@ -60,9 +69,12 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         _options = options ?? new BridgeOptions();
         _tracker = new StateTracker(_time);
         var topics = settings.CreateTopicLayout();
-        _discovery = new DiscoveryBuilder(topics, settings.NodeName.Trim(), version);
+        _topics = topics;
+        _commands = commands;
+        _discovery = new DiscoveryBuilder(topics, settings.NodeName.Trim(), version, settings.CommandsEnabled && commands is not null);
         _stateTopic = topics.StateTopic;
         _availabilityTopic = topics.AvailabilityTopic;
+        _transport.MessageReceived += OnMessageAsync;
     }
 
     public FrontEndSnapshot Current => _tracker.Current;
@@ -154,8 +166,10 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
             await StopAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
         }
 
+        _transport.MessageReceived -= OnMessageAsync;
         await _transport.DisposeAsync().ConfigureAwait(false);
         _stopping.Dispose();
+        _commandSlot.Dispose();
     }
 
     private void Mutate(Func<bool> change, string source)
@@ -278,6 +292,110 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         Volatile.Write(ref _dirty, 0);
         await PublishStateAsync(stop).ConfigureAwait(false);
         await _transport.PublishAsync(new OutboundMessage(_availabilityTopic, Availability.Online, Retain: true), stop).ConfigureAwait(false);
+
+        if (_settings.CommandsEnabled)
+        {
+            if (_commands is null)
+            {
+                _log.Log(BridgeLogLevel.Warning, "Commands are enabled but this host has no command handler; not subscribing.");
+            }
+            else
+            {
+                // Subscriptions do not survive a clean-session reconnect, so this runs on every connect.
+                await _transport.SubscribeAsync(_topics.CommandSubscription, stop).ConfigureAwait(false);
+                _log.Log(BridgeLogLevel.Info, $"Accepting commands on {_topics.CommandSubscription}.");
+            }
+        }
+    }
+
+    private Task OnMessageAsync(IncomingMessage message)
+    {
+        // Defence in depth: never act on a command unless enabled, whatever the broker sends.
+        if (!_settings.CommandsEnabled || _commands is null || _stopping.IsCancellationRequested)
+        {
+            return Task.CompletedTask;
+        }
+
+        // Off the transport's thread: a command may take seconds and must not stall MQTT.
+        _ = Task.Run(() => ExecuteCommandAsync(message));
+        return Task.CompletedTask;
+    }
+
+    private async Task ExecuteCommandAsync(IncomingMessage message)
+    {
+        var (command, rejection) = CommandParser.Parse(_topics, message.Topic, message.Payload, message.Retained);
+        var name = command?.Name ?? message.Topic[Math.Min(message.Topic.Length, _topics.CommandTopicPrefix.Length)..];
+        CommandOutcome outcome;
+        if (command is null)
+        {
+            outcome = CommandOutcome.Rejected(name, rejection ?? "invalid command");
+        }
+        else if (!_commandSlot.Wait(0))
+        {
+            outcome = CommandOutcome.Rejected(name, "another command is still running");
+        }
+        else
+        {
+            try
+            {
+                var now = _time.GetUtcNow();
+                if (now - _lastCommandAt < _options.MinCommandInterval)
+                {
+                    outcome = CommandOutcome.Rejected(name, $"too soon after the previous command (minimum {_options.MinCommandInterval.TotalSeconds:0} s apart)");
+                }
+                else
+                {
+                    _lastCommandAt = now;
+                    _log.Log(BridgeLogLevel.Info, $"Command received: {command}.");
+                    outcome = await _commands!.HandleAsync(command, _stopping.Token)
+                        .WaitAsync(_options.CommandTimeout, _time, _stopping.Token)
+                        .ConfigureAwait(false);
+                }
+            }
+            catch (TimeoutException)
+            {
+                outcome = CommandOutcome.Rejected(name, $"did not finish within {_options.CommandTimeout.TotalSeconds:0} s");
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+#pragma warning disable CA1031 // A failing command is reported on the result topic; it must not take the bridge down.
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                _log.Log(BridgeLogLevel.Error, $"Command {name} failed.", ex);
+                outcome = CommandOutcome.Rejected(name, ex.Message);
+            }
+            finally
+            {
+                _commandSlot.Release();
+            }
+        }
+
+        _log.Log(outcome.Accepted ? BridgeLogLevel.Info : BridgeLogLevel.Warning, $"Command {outcome.Command}: {(outcome.Accepted ? "done" : "refused")}: {outcome.Detail}");
+        await PublishOutcomeAsync(outcome).ConfigureAwait(false);
+    }
+
+    private async Task PublishOutcomeAsync(CommandOutcome outcome)
+    {
+        var payload = new JsonObject
+        {
+            ["command"] = outcome.Command,
+            ["accepted"] = outcome.Accepted,
+            ["detail"] = outcome.Detail,
+            ["at"] = _time.GetUtcNow().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+        };
+        try
+        {
+            await _transport.PublishAsync(new OutboundMessage(_topics.CommandResultTopic, payload.ToJsonString(), Retain: false), _stopping.Token).ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // The outcome is already logged; a lost result message is not worth more.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _log.Log(BridgeLogLevel.Debug, "Could not publish the command result.", ex);
+        }
     }
 
     private Task PublishStateAsync(CancellationToken stop) =>

@@ -176,6 +176,29 @@ Verified on BigBox 14.1.0.5 on 2026-11-20 (the plugin log records every event):
   other starts 0.1–0.3 s; no error logged). Possibly thread-pool pressure while
   LaunchBox starts. Not reproduced; watch for it.
 
+### Commands (milestone 5)
+
+- LaunchBox 14.1 offers `DataManager.GetGameById` and
+  `BigBoxMainViewModel.PlayGame` / `LaunchBoxMainViewModel.PlayGame` (the full
+  launch with startup screens). The plugin passes null for the additional app,
+  emulator and command line, so a command can only start a library game the
+  normal way. `PlayGame` runs on LaunchBox's UI thread via the
+  `SynchronizationContext` captured when LaunchBox constructs the plugin.
+- There is **no API to exit a game**. `exit_game` sends WM_CLOSE
+  (`Process.CloseMainWindow`, like Alt+F4) to windowed processes that descend
+  from the Big Box process (Toolhelp parent ids), skipping LaunchBox's helpers
+  under `Core\` and `System\`. Parentage matters: on the reference cabinet,
+  Game Bar and Edge processes start whenever a game launches. Nothing is ever
+  killed; a game that ignores the close is reported, not forced.
+- There is **no toast in Big Box**: `INotificationManager` documents that Big
+  Box has no notification system. A custom topmost window over fullscreen
+  emulators was judged too fragile; dropped from scope.
+- Core: `CommandParser` (strict: two names, GUID only, ≤256 bytes, UTF-8,
+  retained → refused), bridge rules (off unless `CommandsEnabled`; subscribe on
+  every connect with retain-handling "do not send"; one at a time; ≥3 s apart;
+  30 s timeout; outcome on `command_result`, not retained), discovery adds a
+  button and a text entity, or empties their configs so they disappear.
+
 ## Architecture
 
 ```text
@@ -276,7 +299,8 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 4. Reference deployment (above). **Done 2026-11-20:** v0.1.0 installed by
    the cabinet's installer (pinned by version and SHA256), Home Assistant's
    now-playing chip switched to the plugin's entities, the SSH poll removed.
-5. v2 commands, opt-in.
+5. v2 commands, opt-in. **Implemented 2026-11-20** (exit game, launch game;
+   no Big Box toast: no API).
 
 ## Decisions (settled 2026-11-20)
 

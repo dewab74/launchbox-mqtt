@@ -22,6 +22,7 @@ public sealed class SettingsFormTests : IDisposable
         [SettingsForm.BaseTopic] = "launchbox",
         [SettingsForm.DiscoveryPrefix] = "homeassistant",
         [SettingsForm.DiscoveryEnabled] = "true",
+        [SettingsForm.CommandsEnabled] = "true",
     };
 
     [Fact]
@@ -44,6 +45,15 @@ public sealed class SettingsFormTests : IDisposable
         var again = SettingsForm.Parse(
             new Dictionary<string, string>(SettingsForm.ToValues(true, original)), "PC", hasStoredPassword: true);
         Assert.Equal(original with { Port = original.EffectivePort }, again.Settings! with { Port = again.Settings.EffectivePort });
+    }
+
+    [Fact]
+    public void Commands_default_to_off()
+    {
+        var values = Valid();
+        values.Remove(SettingsForm.CommandsEnabled);
+        Assert.False(SettingsForm.Parse(values, "PC", true).Settings!.CommandsEnabled);
+        Assert.True(SettingsForm.Parse(Valid(), "PC", true).Settings!.CommandsEnabled);
     }
 
     [Fact]
@@ -133,6 +143,7 @@ public sealed class SettingsFormTests : IDisposable
         Assert.Contains("LaunchBox's", File.ReadAllText(path), StringComparison.Ordinal);
         var loaded = SettingsFile.Load(path, "PC");
         Assert.True(loaded.Enabled);
+        Assert.True(loaded.Settings.CommandsEnabled);
         Assert.Equal("broker.lan", loaded.Settings.Host);
         Assert.Null(loaded.PlaintextPassword);
     }

@@ -17,8 +17,9 @@ public sealed class DiscoveryBuilder
     private readonly TopicLayout _topics;
     private readonly string _displayName;
     private readonly string _version;
+    private readonly bool _commandsEnabled;
 
-    public DiscoveryBuilder(TopicLayout topics, string displayName, string version)
+    public DiscoveryBuilder(TopicLayout topics, string displayName, string version, bool commandsEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(topics);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
@@ -26,6 +27,7 @@ public sealed class DiscoveryBuilder
         _topics = topics;
         _displayName = displayName;
         _version = version;
+        _commandsEnabled = commandsEnabled;
     }
 
     /// <summary>The entities, in a fixed order. The object id is also the unique-id suffix.</summary>
@@ -73,12 +75,38 @@ public sealed class DiscoveryBuilder
         },
     ];
 
-    /// <summary>The retained config messages that create the device and its entities.</summary>
+    /// <summary>
+    /// Command entities, only discovered while commands are enabled. When they
+    /// are off, their config topics are emptied so Home Assistant removes them.
+    /// </summary>
+    public static IReadOnlyList<EntityDefinition> CommandEntities { get; } =
+    [
+        new("button", "exit_game", "Exit game", ValueTemplate: null)
+        {
+            Icon = "mdi:exit-run",
+            CommandTopicName = Commands.ExitGameCommand.TopicName,
+        },
+        // A game id in, a launch out; no state of its own (Home Assistant keeps the last value sent).
+        new("text", "launch_game", "Launch game (id)", ValueTemplate: null)
+        {
+            Icon = "mdi:play-box",
+            CommandTopicName = Commands.LaunchGameCommand.TopicName,
+            Pattern = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        },
+    ];
+
+    /// <summary>
+    /// The retained config messages that create the device and its entities,
+    /// plus either the command entities or empty configs that remove them.
+    /// </summary>
     public IReadOnlyList<OutboundMessage> BuildConfigs() =>
-        [.. Entities.Select(e => new OutboundMessage(
-            _topics.DiscoveryTopic(e.Component, e.ObjectId),
-            BuildConfig(e).ToJsonString(),
-            Retain: true))];
+        [
+            .. Entities.Select(e => new OutboundMessage(_topics.DiscoveryTopic(e.Component, e.ObjectId), BuildConfig(e).ToJsonString(), Retain: true)),
+            .. CommandEntities.Select(e => new OutboundMessage(
+                _topics.DiscoveryTopic(e.Component, e.ObjectId),
+                _commandsEnabled ? BuildConfig(e).ToJsonString() : string.Empty,
+                Retain: true)),
+        ];
 
     /// <summary>
     /// Empty retained payloads on every config topic: Home Assistant deletes the
@@ -86,7 +114,7 @@ public sealed class DiscoveryBuilder
     /// and when discovery is switched off.
     /// </summary>
     public IReadOnlyList<OutboundMessage> BuildRemovals() =>
-        [.. Entities.Select(e => new OutboundMessage(_topics.DiscoveryTopic(e.Component, e.ObjectId), string.Empty, Retain: true))];
+        [.. Entities.Concat(CommandEntities).Select(e => new OutboundMessage(_topics.DiscoveryTopic(e.Component, e.ObjectId), string.Empty, Retain: true))];
 
     internal JsonObject BuildConfig(EntityDefinition entity)
     {
@@ -94,8 +122,6 @@ public sealed class DiscoveryBuilder
         {
             ["name"] = entity.Name,
             ["unique_id"] = $"{_topics.DeviceId}_{entity.ObjectId}",
-            ["state_topic"] = _topics.StateTopic,
-            ["value_template"] = entity.ValueTemplate,
             ["availability_topic"] = _topics.AvailabilityTopic,
             ["payload_available"] = Availability.Online,
             ["payload_not_available"] = Availability.Offline,
@@ -113,6 +139,25 @@ public sealed class DiscoveryBuilder
                 ["support_url"] = ProjectUrl,
             },
         };
+
+        if (entity.CommandTopicName is { } command)
+        {
+            config["command_topic"] = _topics.CommandTopic(command);
+            config["retain"] = false;
+            config["qos"] = 1;
+        }
+        else
+        {
+            config["state_topic"] = _topics.StateTopic;
+            config["value_template"] = entity.ValueTemplate;
+        }
+
+        if (entity.Pattern is { } pattern)
+        {
+            config["pattern"] = pattern;
+            config["min"] = 36;
+            config["max"] = 36;
+        }
 
         if (entity.DeviceClass is { } deviceClass)
         {
@@ -140,8 +185,14 @@ public sealed class DiscoveryBuilder
 }
 
 /// <summary>One Home Assistant entity, as the discovery config describes it.</summary>
-public sealed record EntityDefinition(string Component, string ObjectId, string Name, string ValueTemplate)
+public sealed record EntityDefinition(string Component, string ObjectId, string Name, string? ValueTemplate)
 {
+    /// <summary>For command entities: the command topic name; they then have no state topic.</summary>
+    public string? CommandTopicName { get; init; }
+
+    /// <summary>For text entities: the allowed input.</summary>
+    public string? Pattern { get; init; }
+
     public string? DeviceClass { get; init; }
 
     public string? Icon { get; init; }

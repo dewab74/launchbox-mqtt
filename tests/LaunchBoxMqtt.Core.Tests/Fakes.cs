@@ -29,6 +29,20 @@ internal sealed class FakeTransport : IMqttTransport
 
     public bool IsConnected => _connected;
 
+    public ConcurrentQueue<string> Subscriptions { get; } = new();
+
+    public event Func<IncomingMessage, Task>? MessageReceived;
+
+    public Task SubscribeAsync(string topicFilter, CancellationToken cancellationToken)
+    {
+        Subscriptions.Enqueue(topicFilter);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The broker delivers a message.</summary>
+    public Task Deliver(string topic, string payload, bool retained = false) =>
+        MessageReceived?.Invoke(new IncomingMessage(topic, System.Text.Encoding.UTF8.GetBytes(payload), retained)) ?? Task.CompletedTask;
+
     public Task ConnectAsync(CancellationToken cancellationToken)
     {
         ConnectAttempts++;
@@ -113,5 +127,23 @@ internal static class Eventually
 
             await Task.Delay(10);
         }
+    }
+}
+
+internal sealed class RecordingCommandHandler : LaunchBoxMqtt.Core.Commands.ICommandHandler
+{
+    public ConcurrentQueue<LaunchBoxMqtt.Core.Commands.Command> Handled { get; } = new();
+
+    public TaskCompletionSource? Gate { get; set; }
+
+    public async Task<LaunchBoxMqtt.Core.Commands.CommandOutcome> HandleAsync(LaunchBoxMqtt.Core.Commands.Command command, CancellationToken cancellationToken)
+    {
+        Handled.Enqueue(command);
+        if (Gate is { } gate)
+        {
+            await gate.Task.WaitAsync(cancellationToken);
+        }
+
+        return LaunchBoxMqtt.Core.Commands.CommandOutcome.Ok(command.Name, "handled (fake)");
     }
 }

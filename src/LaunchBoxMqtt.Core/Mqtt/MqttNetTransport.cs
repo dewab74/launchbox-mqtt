@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography.X509Certificates;
 using LaunchBoxMqtt.Core.Payloads;
 using MQTTnet;
@@ -31,7 +32,10 @@ public sealed class MqttNetTransport : IMqttTransport
             ? CertificateValidation.LoadCaBundle(settings.CaCertificatePath)
             : null;
         _client = new MqttClientFactory().CreateMqttClient();
+        _client.ApplicationMessageReceivedAsync += OnApplicationMessageAsync;
     }
+
+    public event Func<IncomingMessage, Task>? MessageReceived;
 
     public bool IsConnected => _client.IsConnected;
 
@@ -87,6 +91,27 @@ public sealed class MqttNetTransport : IMqttTransport
         }
     }
 
+    public async Task SubscribeAsync(string topicFilter, CancellationToken cancellationToken)
+    {
+        var options = new MqttClientSubscribeOptionsBuilder()
+            .WithTopicFilter(f => f
+                .WithTopic(topicFilter)
+                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .WithRetainHandling(MqttRetainHandling.DoNotSendOnSubscribe)
+                // MQTT 5: keep the retain flag on live deliveries too, so a command published with
+                // retain on is refused at once instead of acting live and lingering on the broker.
+                .WithRetainAsPublished(true))
+            .Build();
+        var result = await _client.SubscribeAsync(options, cancellationToken).ConfigureAwait(false);
+        foreach (var item in result.Items)
+        {
+            if (item.ResultCode > MqttClientSubscribeResultCode.GrantedQoS2)
+            {
+                throw new InvalidOperationException($"Broker refused subscription to '{topicFilter}': {item.ResultCode}");
+            }
+        }
+    }
+
     public async Task DisconnectAsync(CancellationToken cancellationToken)
     {
         if (!_client.IsConnected)
@@ -104,6 +129,18 @@ public sealed class MqttNetTransport : IMqttTransport
     {
         _client.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    private Task OnApplicationMessageAsync(MqttApplicationMessageReceivedEventArgs args)
+    {
+        var handler = MessageReceived;
+        if (handler is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var message = args.ApplicationMessage;
+        return handler(new IncomingMessage(message.Topic, message.Payload.ToArray(), message.Retain));
     }
 
     internal MqttClientOptions BuildOptions(MqttProtocolVersion protocol)

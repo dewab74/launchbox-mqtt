@@ -24,6 +24,7 @@ public sealed class SettingsFileTests : IDisposable
         Assert.Null(content.PlaintextPassword);
         Assert.Equal("COCKTAIL", content.Settings.NodeName);
         Assert.Contains(content.Settings.Validate(), e => e.Contains("host", StringComparison.OrdinalIgnoreCase));
+        Assert.False(content.Settings.CommandsEnabled);
     }
 
     [Fact]

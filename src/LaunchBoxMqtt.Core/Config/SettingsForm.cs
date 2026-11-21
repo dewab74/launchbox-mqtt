@@ -36,6 +36,7 @@ public static class SettingsForm
     public const string BaseTopic = "baseTopic";
     public const string DiscoveryPrefix = "discoveryPrefix";
     public const string DiscoveryEnabled = "discoveryEnabled";
+    public const string CommandsEnabled = "commandsEnabled";
 
     /// <summary>Initial form values from the current settings (no password).</summary>
     public static IReadOnlyDictionary<string, string> ToValues(bool enabled, BridgeSettings settings)
@@ -53,6 +54,7 @@ public static class SettingsForm
             [BaseTopic] = settings.BaseTopic,
             [DiscoveryPrefix] = settings.DiscoveryPrefix,
             [DiscoveryEnabled] = Bool(settings.DiscoveryEnabled),
+            [CommandsEnabled] = Bool(settings.CommandsEnabled),
         };
     }
 
@@ -140,6 +142,7 @@ public static class SettingsForm
             BaseTopic = baseTopic,
             DiscoveryPrefix = discoveryPrefix,
             DiscoveryEnabled = GetBool(DiscoveryEnabled, true),
+            CommandsEnabled = GetBool(CommandsEnabled, false),
         };
         return new SettingsFormSubmission(enabled, settings, password, errors);
     }

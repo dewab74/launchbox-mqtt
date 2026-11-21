@@ -19,7 +19,7 @@ public partial class DiscoveryBuilderTests
     {
         var configs = Builder.BuildConfigs();
 
-        Assert.Equal(DiscoveryBuilder.Entities.Count, configs.Count);
+        Assert.Equal(DiscoveryBuilder.Entities.Count + DiscoveryBuilder.CommandEntities.Count, configs.Count);
         Assert.All(configs, m => Assert.True(m.Retain));
         Assert.Contains(configs, m => m.Topic == "homeassistant/sensor/launchbox_cocktail/now_playing/config");
         Assert.Contains(configs, m => m.Topic == "homeassistant/binary_sensor/launchbox_cocktail/playing/config");
@@ -29,12 +29,21 @@ public partial class DiscoveryBuilderTests
     [Fact]
     public void Every_config_shares_the_device_and_availability()
     {
-        foreach (var message in Builder.BuildConfigs())
+        foreach (var message in new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true).BuildConfigs())
         {
             using var doc = JsonDocument.Parse(message.Payload);
             var root = doc.RootElement;
 
-            Assert.Equal("launchbox/cocktail/state", root.GetProperty("state_topic").GetString());
+            if (root.TryGetProperty("command_topic", out var commandTopic))
+            {
+                Assert.StartsWith("launchbox/cocktail/command/", commandTopic.GetString(), StringComparison.Ordinal);
+                Assert.False(root.GetProperty("retain").GetBoolean());
+            }
+            else
+            {
+                Assert.Equal("launchbox/cocktail/state", root.GetProperty("state_topic").GetString());
+            }
+
             Assert.Equal("launchbox/cocktail/availability", root.GetProperty("availability_topic").GetString());
             Assert.Equal(Availability.Online, root.GetProperty("payload_available").GetString());
             Assert.Equal(Availability.Offline, root.GetProperty("payload_not_available").GetString());
@@ -51,7 +60,7 @@ public partial class DiscoveryBuilderTests
     [Fact]
     public void Unique_ids_are_unique()
     {
-        var ids = Builder.BuildConfigs()
+        var ids = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true).BuildConfigs()
             .Select(m => JsonElement.Parse(m.Payload).GetProperty("unique_id").GetString())
             .ToList();
         Assert.Equal(ids.Count, ids.Distinct().Count());
@@ -85,12 +94,28 @@ public partial class DiscoveryBuilderTests
 
         foreach (var entity in DiscoveryBuilder.Entities)
         {
-            var templates = new[] { entity.ValueTemplate, entity.AttributesTemplate ?? string.Empty };
+            var templates = new[] { entity.ValueTemplate ?? string.Empty, entity.AttributesTemplate ?? string.Empty };
             foreach (Match m in templates.SelectMany(t => ValueJsonField().Matches(t)))
             {
                 Assert.Contains(m.Groups[1].Value, fields);
             }
         }
+    }
+
+    [Fact]
+    public void Command_entities_are_removed_while_commands_are_off()
+    {
+        var off = Builder.BuildConfigs();
+        var on = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true).BuildConfigs();
+
+        var exitTopic = "homeassistant/button/launchbox_cocktail/exit_game/config";
+        Assert.Equal(string.Empty, off.Single(m => m.Topic == exitTopic).Payload);
+        Assert.True(off.Single(m => m.Topic == exitTopic).Retain);
+        Assert.Equal("launchbox/cocktail/command/exit_game", JsonElement.Parse(on.Single(m => m.Topic == exitTopic).Payload).GetProperty("command_topic").GetString());
+
+        var launch = JsonElement.Parse(on.Single(m => m.Topic.Contains("/text/", StringComparison.Ordinal)).Payload);
+        Assert.Equal("launchbox/cocktail/command/launch_game", launch.GetProperty("command_topic").GetString());
+        Assert.Matches(launch.GetProperty("pattern").GetString()!, "6f1c2a4e-0000-4000-8000-000000000001");
     }
 
     [Fact]

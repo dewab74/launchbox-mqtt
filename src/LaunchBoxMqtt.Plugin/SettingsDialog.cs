@@ -21,6 +21,14 @@ internal sealed class SettingsDialog : Form
     private readonly CheckBox _discovery = new() { Text = "Home Assistant discovery", AutoSize = true };
     private readonly TextBox _discoveryPrefix = new() { Width = 320 };
     private readonly TextBox _baseTopic = new() { Width = 320 };
+    private readonly CheckBox _commands = new() { Text = "Accept commands (exit game, launch game by id)", AutoSize = true };
+    private readonly Label _commandsWarning = new()
+    {
+        Text = "Anyone who can publish to this PC's command topics can then start and close games. Use a broker account for this PC only.",
+        AutoSize = true,
+        MaximumSize = new System.Drawing.Size(330, 0),
+        ForeColor = System.Drawing.SystemColors.GrayText,
+    };
     private readonly Button _test = new() { Text = "Test connection", AutoSize = true };
     private readonly Button _save = new() { Text = "Save", AutoSize = true };
     private readonly Button _cancel = new() { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
@@ -56,6 +64,7 @@ internal sealed class SettingsDialog : Form
             [SettingsForm.DiscoveryEnabled] = _discovery,
             [SettingsForm.DiscoveryPrefix] = _discoveryPrefix,
             [SettingsForm.BaseTopic] = _baseTopic,
+            [SettingsForm.CommandsEnabled] = _commands,
         };
 
         var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
@@ -90,6 +99,9 @@ internal sealed class SettingsDialog : Form
         Row(string.Empty, _discovery);
         Row("Discovery prefix", _discoveryPrefix);
         Row("Base topic", _baseTopic);
+        Heading("Commands");
+        Row(string.Empty, _commands);
+        Row(string.Empty, _commandsWarning);
         grid.Controls.Add(_status);
         grid.SetColumnSpan(_status, 2);
         grid.Controls.Add(buttons);
@@ -133,6 +145,7 @@ internal sealed class SettingsDialog : Form
             _discovery.Checked = V(SettingsForm.DiscoveryEnabled) != "false";
             _discoveryPrefix.Text = V(SettingsForm.DiscoveryPrefix);
             _baseTopic.Text = V(SettingsForm.BaseTopic);
+            _commands.Checked = V(SettingsForm.CommandsEnabled) == "true";
             UpdateTlsFields();
             SetBusy(false, string.Empty);
         }
@@ -195,6 +208,7 @@ internal sealed class SettingsDialog : Form
         [SettingsForm.DiscoveryEnabled] = _discovery.Checked ? "true" : "false",
         [SettingsForm.DiscoveryPrefix] = _discoveryPrefix.Text,
         [SettingsForm.BaseTopic] = _baseTopic.Text,
+        [SettingsForm.CommandsEnabled] = _commands.Checked ? "true" : "false",
     };
 
     private void UpdateTlsFields()
