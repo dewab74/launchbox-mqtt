@@ -26,5 +26,14 @@ public sealed record BridgeOptions
     /// <summary>Reading and scaling one game's artwork may take at most this long.</summary>
     public TimeSpan ArtworkTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>Stats may go to the network (RetroAchievements); give up after this.</summary>
+    public TimeSpan StatsTimeout { get; init; } = TimeSpan.FromSeconds(45);
+
+    /// <summary>
+    /// After a game exits its stats are read again (MAME writes its high score table
+    /// on exit; new achievements show up), this long after the exit.
+    /// </summary>
+    public TimeSpan StatsRefreshDelay { get; init; } = TimeSpan.FromSeconds(3);
+
     public Func<ReconnectBackoff> BackoffFactory { get; init; } = ReconnectBackoff.CreateDefault;
 }

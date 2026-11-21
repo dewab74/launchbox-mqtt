@@ -66,6 +66,38 @@ entity, ready for a picture card.
   after scaling is skipped (lower the width).
 - Turning artwork off removes the entity and clears the retained image.
 
+## Game stats (opt-in)
+
+Off by default. Turn on **Publish game stats** in the settings window (or
+`"statsEnabled": true`). When a game launches, the plugin asks LaunchBox's own
+services and this PC's files, on a worker thread with a 45 s limit, and publishes the answer as
+JSON on `launchbox/<node>/stats`, retained:
+
+- **Achievements** (`sensor.<node>_achievements`, e.g. `12/40`): the game's
+  RetroAchievements progress for the account set up in LaunchBox, through
+  LaunchBox's achievement manager (its game matching, account selection,
+  caching and rate limits). One refresh per launch. The mode with the most
+  unlocked wins, hardcore on a tie. Attributes: `unlocked`, `total`,
+  `percent`, `points`, `points_total`, `mode`, `beaten`, `completed`.
+  Arcade games can have a set too.
+- **High score** (`sensor.<node>_high_score`): for games run by MAME, **this
+  PC's own** best score, from the table MAME's hiscore plugin keeps in
+  `<MAME folder>\hi\<rom>.hi`, decoded by the `hi2txt` that ships with
+  LaunchBox (`ThirdParty\hi2txt`). The game's factory default entries (from
+  hi2txt's defaults archive) are removed, so a game nobody has scored in shows
+  unknown, not the arcade's built-in table. Attributes: `name` (initials) and
+  `entries` (the top 5: `rank`, `score`, `name`). Never an online leaderboard.
+
+Stats are read again a few seconds after a game exits, which is when MAME
+writes its table, so a new score (or a new achievement) shows without
+relaunching. Either sensor is unknown when it does not apply (a game with no
+RetroAchievements set, a non-MAME game, no score yet). Read only: the plugin
+never submits scores and never signs in. A game without stats publishes
+"nothing known" rather than keeping the previous game's numbers. Turning stats
+off removes both entities and clears the topic. LaunchBox supplies the
+achievement service to a separate small entry point, so a LaunchBox version
+without it only loses achievements.
+
 ## Commands (opt-in)
 
 Off by default. Turn on **Accept commands** in the settings window (or
@@ -115,6 +147,7 @@ and a PC named `COCKTAIL` (node id `cocktail`):
 | `launchbox/cocktail/state` | yes | JSON state document, below |
 | `launchbox/cocktail/availability` | yes | `online` / `offline` |
 | `launchbox/cocktail/artwork` | yes | PNG bytes of the current game's artwork (when enabled) |
+| `launchbox/cocktail/stats` | yes | JSON: the last game's achievements and this PC's MAME high score (when enabled) |
 | `homeassistant/<component>/launchbox_cocktail/<object>/config` | yes | Discovery configs |
 
 The node id is the PC name, lower-cased, with anything outside `a-z 0-9 _ -`
@@ -222,6 +255,7 @@ start.
 | `commandsEnabled` | `false` | Accept commands; see "Commands" |
 | `artworkEnabled` | `false` | Publish game artwork; see "Artwork" |
 | `artworkMaxWidth` | `800` | Pixels, 64-2048 |
+| `statsEnabled` | `false` | Publish game stats; see "Game stats" |
 
 **The password does not stay in the file.** The settings window never writes
 it there. If you put one in the file, the next start moves

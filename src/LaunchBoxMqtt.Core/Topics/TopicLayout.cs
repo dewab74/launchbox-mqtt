@@ -38,6 +38,9 @@ public sealed class TopicLayout
     /// <summary>The current game's artwork as raw PNG bytes, retained (only when enabled).</summary>
     public string ArtworkTopic => $"{BaseTopic}/{Node}/artwork";
 
+    /// <summary>Retained JSON with the last game's stats (achievements, top score).</summary>
+    public string StatsTopic => $"{BaseTopic}/{Node}/stats";
+
     /// <summary>Commands arrive on <c>&lt;base&gt;/&lt;node&gt;/command/&lt;name&gt;</c> (only when enabled).</summary>
     public string CommandTopicPrefix => $"{BaseTopic}/{Node}/command/";
 

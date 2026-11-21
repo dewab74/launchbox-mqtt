@@ -237,13 +237,22 @@ what the 14.1 services return on the reference cabinet. Inputs for a future
   recent unlocks (the probe's JSON dump hit a reference cycle in
   `AdditionalData`; map fields explicitly).
 - No API passes a game *score* to a plugin. MAME's own `hiscore` plugin saves
-  raw `.hi` files (decoding needs hi2txt), out of scope.
+  raw `.hi` files; LaunchBox ships `ThirdParty\hi2txt\hi2txt.exe`, whose
+  `-r -xml` output is a table, plus `hi2txt_doc\hi2txt_defaults.zip` with each
+  game's factory table (`<rom>.xml`, same format). Game stats use both.
 - `EnableMameGameEvents` (LaunchBox setting, off on the reference cabinet)
   loads LaunchBox's `lbevents` Lua plugin into MAME, which reports
   `MameGameSessionStarted`, `MameCoinInserted`, `MamePlayerStarted`,
-  `MameGameSessionEnded` (no payload reaches `ISystemEventsPlugin`). Untested
-  with MAME 0.233, and its interaction with MAME's other plugins (hiscore) is
-  unverified.
+  `MameGameSessionEnded` (no payload reaches `ISystemEventsPlugin`). **Tried
+  2026-11-21 on the reference cabinet: no effect.** With the setting on,
+  BigBox 14.1 started MAME 0.233 as plain `mame.exe -keyboardprovider dinput
+  <rom>`: no `-plugin lbevents`, no `session.txt` in the plugin folder, no
+  events. Turned back off. (lbevents is in LaunchBox's `ThirdParty\MAME\plugins`
+  and in the emulator's own `plugins` folder with `"start": "false"`.)
+- `RefreshAsync(IGame)` does find RetroAchievements sets for arcade games
+  (Galaga: 17) even though the cached probe saw no association; progress
+  summaries leave `TotalPoints`/`EarnedPoints` empty, but the snapshot's
+  catalog has each achievement's points.
 
 ## Architecture
 
@@ -348,8 +357,14 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 5. v2 commands, opt-in. **Done 2026-11-20**, released in v0.2.0 (exit game,
    launch game; no Big Box toast: no API).
 6. Artwork as a Home Assistant image. **Done 2026-11-20**, released in v0.3.0.
-7. Possible: game stats (RetroAchievements progress, MAME community
-   leaderboard top score, MAME coin/start events). See "Game stats" above.
+7. Game stats: RetroAchievements progress and this PC's own MAME high
+   score as retained JSON + two sensors, opt-in. **Done 2026-11-21**
+   (unreleased). The community leaderboard was tried first and dropped: the
+   owner only wants scores set on this cabinet. Tested on the reference
+   cabinet: Galaga 111,000 DEW (0/17 achievements), Donkey Kong 17,200 DEW
+   (0/18), Streets of Rage 3 0/48 and 0 of 600 points; the re-read after exit
+   fires 3 s after the game closes. MAME coin/start events are not possible
+   there (see below).
 
 ## Decisions (settled 2026-11-20)
 

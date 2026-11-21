@@ -39,6 +39,7 @@ public static class SettingsForm
     public const string CommandsEnabled = "commandsEnabled";
     public const string ArtworkEnabled = "artworkEnabled";
     public const string ArtworkMaxWidth = "artworkMaxWidth";
+    public const string StatsEnabled = "statsEnabled";
 
     /// <summary>Initial form values from the current settings (no password).</summary>
     public static IReadOnlyDictionary<string, string> ToValues(bool enabled, BridgeSettings settings)
@@ -59,6 +60,7 @@ public static class SettingsForm
             [CommandsEnabled] = Bool(settings.CommandsEnabled),
             [ArtworkEnabled] = Bool(settings.ArtworkEnabled),
             [ArtworkMaxWidth] = settings.ArtworkMaxWidth.ToString(CultureInfo.InvariantCulture),
+            [StatsEnabled] = Bool(settings.StatsEnabled),
         };
     }
 
@@ -158,6 +160,7 @@ public static class SettingsForm
             CommandsEnabled = GetBool(CommandsEnabled, false),
             ArtworkEnabled = GetBool(ArtworkEnabled, false),
             ArtworkMaxWidth = artworkWidth,
+            StatsEnabled = GetBool(StatsEnabled, false),
         };
         return new SettingsFormSubmission(enabled, settings, password, errors);
     }

@@ -22,6 +22,7 @@ internal sealed class SettingsDialog : Form
     private readonly TextBox _discoveryPrefix = new() { Width = 320 };
     private readonly TextBox _baseTopic = new() { Width = 320 };
     private readonly CheckBox _artwork = new() { Text = "Publish game artwork (marquee, else clear logo, else box front)", AutoSize = true };
+    private readonly CheckBox _stats = new() { Text = "Publish game stats (RetroAchievements progress, this cabinet's MAME high scores)", AutoSize = true };
     private readonly NumericUpDown _artworkWidth = new()
     {
         Minimum = LaunchBoxMqtt.Core.Mqtt.BridgeSettings.MinArtworkMaxWidth,
@@ -75,6 +76,7 @@ internal sealed class SettingsDialog : Form
             [SettingsForm.CommandsEnabled] = _commands,
             [SettingsForm.ArtworkEnabled] = _artwork,
             [SettingsForm.ArtworkMaxWidth] = _artworkWidth,
+            [SettingsForm.StatsEnabled] = _stats,
         };
 
         var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
@@ -111,6 +113,7 @@ internal sealed class SettingsDialog : Form
         Row("Base topic", _baseTopic);
         Row(string.Empty, _artwork);
         Row("Artwork max width (px)", _artworkWidth);
+        Row(string.Empty, _stats);
         Heading("Commands");
         Row(string.Empty, _commands);
         Row(string.Empty, _commandsWarning);
@@ -165,6 +168,7 @@ internal sealed class SettingsDialog : Form
                 (int)_artworkWidth.Minimum,
                 (int)_artworkWidth.Maximum);
             _artworkWidth.Enabled = _artwork.Checked;
+            _stats.Checked = V(SettingsForm.StatsEnabled) == "true";
             UpdateTlsFields();
             SetBusy(false, string.Empty);
         }
@@ -230,6 +234,7 @@ internal sealed class SettingsDialog : Form
         [SettingsForm.CommandsEnabled] = _commands.Checked ? "true" : "false",
         [SettingsForm.ArtworkEnabled] = _artwork.Checked ? "true" : "false",
         [SettingsForm.ArtworkMaxWidth] = ((int)_artworkWidth.Value).ToString(CultureInfo.InvariantCulture),
+        [SettingsForm.StatsEnabled] = _stats.Checked ? "true" : "false",
     };
 
     private void UpdateTlsFields()

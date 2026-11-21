@@ -25,6 +25,7 @@ public sealed class SettingsFormTests : IDisposable
         [SettingsForm.CommandsEnabled] = "true",
         [SettingsForm.ArtworkEnabled] = "true",
         [SettingsForm.ArtworkMaxWidth] = "640",
+        [SettingsForm.StatsEnabled] = "true",
     };
 
     [Fact]
@@ -150,6 +151,7 @@ public sealed class SettingsFormTests : IDisposable
         Assert.True(loaded.Settings.CommandsEnabled);
         Assert.True(loaded.Settings.ArtworkEnabled);
         Assert.Equal(640, loaded.Settings.ArtworkMaxWidth);
+        Assert.True(loaded.Settings.StatsEnabled);
         Assert.Equal("broker.lan", loaded.Settings.Host);
         Assert.Null(loaded.PlaintextPassword);
     }

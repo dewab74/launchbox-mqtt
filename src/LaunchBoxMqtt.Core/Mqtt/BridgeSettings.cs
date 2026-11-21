@@ -54,6 +54,9 @@ public sealed record BridgeSettings
     /// <summary>Artwork wider than this is scaled down before publishing.</summary>
     public int ArtworkMaxWidth { get; init; } = DefaultArtworkMaxWidth;
 
+    /// <summary>Publish the game's stats (RetroAchievements progress, MAME community top score). Opt-in.</summary>
+    public bool StatsEnabled { get; init; }
+
     public int EffectivePort => Port ?? (UseTls ? DefaultTlsPort : DefaultPort);
 
     public string NodeId => Topics.NodeId.FromName(NodeName);
@@ -118,5 +121,5 @@ public sealed record BridgeSettings
 
     // The password must never reach a log line through record ToString().
     public override string ToString() =>
-        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")} commands={(CommandsEnabled ? "on" : "off")} artwork={(ArtworkEnabled ? ArtworkMaxWidth + "px" : "off")}";
+        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")} commands={(CommandsEnabled ? "on" : "off")} artwork={(ArtworkEnabled ? ArtworkMaxWidth + "px" : "off")} stats={(StatsEnabled ? "on" : "off")}";
 }

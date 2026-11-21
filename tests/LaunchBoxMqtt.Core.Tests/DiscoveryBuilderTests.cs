@@ -19,7 +19,7 @@ public partial class DiscoveryBuilderTests
     {
         var configs = Builder.BuildConfigs();
 
-        Assert.Equal(DiscoveryBuilder.Entities.Count + DiscoveryBuilder.CommandEntities.Count + DiscoveryBuilder.ArtworkEntities.Count, configs.Count);
+        Assert.Equal(DiscoveryBuilder.Entities.Count + DiscoveryBuilder.CommandEntities.Count + DiscoveryBuilder.ArtworkEntities.Count + DiscoveryBuilder.StatsEntities.Count, configs.Count);
         Assert.All(configs, m => Assert.True(m.Retain));
         Assert.Contains(configs, m => m.Topic == "homeassistant/sensor/launchbox_cocktail/now_playing/config");
         Assert.Contains(configs, m => m.Topic == "homeassistant/binary_sensor/launchbox_cocktail/playing/config");
@@ -29,7 +29,7 @@ public partial class DiscoveryBuilderTests
     [Fact]
     public void Every_config_shares_the_device_and_availability()
     {
-        foreach (var message in new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true).BuildConfigs())
+        foreach (var message in new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true, statsEnabled: true).BuildConfigs())
         {
             using var doc = JsonDocument.Parse(message.Payload);
             var root = doc.RootElement;
@@ -46,7 +46,8 @@ public partial class DiscoveryBuilderTests
             }
             else
             {
-                Assert.Equal("launchbox/cocktail/state", root.GetProperty("state_topic").GetString());
+                var stats = DiscoveryBuilder.StatsEntities.Any(e => message.Topic.EndsWith($"/{e.ObjectId}/config", StringComparison.Ordinal));
+                Assert.Equal(stats ? "launchbox/cocktail/stats" : "launchbox/cocktail/state", root.GetProperty("state_topic").GetString());
             }
 
             Assert.Equal("launchbox/cocktail/availability", root.GetProperty("availability_topic").GetString());
@@ -65,7 +66,7 @@ public partial class DiscoveryBuilderTests
     [Fact]
     public void Unique_ids_are_unique()
     {
-        var ids = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true).BuildConfigs()
+        var ids = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true, statsEnabled: true).BuildConfigs()
             .Select(m => JsonElement.Parse(m.Payload).GetProperty("unique_id").GetString())
             .ToList();
         Assert.Equal(ids.Count, ids.Distinct().Count());
@@ -130,6 +131,19 @@ public partial class DiscoveryBuilderTests
         Assert.Equal(string.Empty, Builder.BuildConfigs().Single(m => m.Topic == topic).Payload);
         var on = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", artworkEnabled: true).BuildConfigs().Single(m => m.Topic == topic);
         Assert.Equal("launchbox/cocktail/artwork", JsonElement.Parse(on.Payload).GetProperty("image_topic").GetString());
+    }
+
+    [Fact]
+    public void Stats_entities_only_while_enabled_and_read_the_stats_topic()
+    {
+        foreach (var id in new[] { "achievements", "high_score" })
+        {
+            var topic = $"homeassistant/sensor/launchbox_cocktail/{id}/config";
+            Assert.Equal(string.Empty, Builder.BuildConfigs().Single(m => m.Topic == topic).Payload);
+            var on = JsonElement.Parse(new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", statsEnabled: true).BuildConfigs().Single(m => m.Topic == topic).Payload);
+            Assert.Equal("launchbox/cocktail/stats", on.GetProperty("state_topic").GetString());
+            Assert.Equal("launchbox/cocktail/stats", on.GetProperty("json_attributes_topic").GetString());
+        }
     }
 
     [Fact]

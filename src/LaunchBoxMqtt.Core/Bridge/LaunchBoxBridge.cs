@@ -7,6 +7,7 @@ using LaunchBoxMqtt.Core.Discovery;
 using LaunchBoxMqtt.Core.Mqtt;
 using LaunchBoxMqtt.Core.Payloads;
 using LaunchBoxMqtt.Core.State;
+using LaunchBoxMqtt.Core.Stats;
 using LaunchBoxMqtt.Core.Topics;
 
 namespace LaunchBoxMqtt.Core.Bridge;
@@ -42,6 +43,12 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
     private string? _artworkGameId;
     private byte[]? _lastArtwork;
     private CancellationTokenSource? _artworkFetch;
+    private readonly IGameStatsSource? _stats;
+    private readonly Lock _statsGate = new();
+    private string? _statsGameId;
+    private GameInfo? _statsGame;
+    private string? _lastStats;
+    private CancellationTokenSource? _statsFetch;
 
     /// <summary>Larger artwork (after scaling) is not published.</summary>
     public const int MaxArtworkBytes = 2 * 1024 * 1024;
@@ -61,7 +68,8 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         TimeProvider? time = null,
         BridgeOptions? options = null,
         ICommandHandler? commands = null,
-        IArtworkSource? artwork = null)
+        IArtworkSource? artwork = null,
+        IGameStatsSource? stats = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(transport);
@@ -82,12 +90,14 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         _topics = topics;
         _commands = commands;
         _artwork = artwork;
+        _stats = stats;
         _discovery = new DiscoveryBuilder(
             topics,
             settings.NodeName.Trim(),
             version,
             commandsEnabled: settings.CommandsEnabled && commands is not null,
-            artworkEnabled: ArtworkActive);
+            artworkEnabled: ArtworkActive,
+            statsEnabled: StatsActive);
         _stateTopic = topics.StateTopic;
         _availabilityTopic = topics.AvailabilityTopic;
         _transport.MessageReceived += OnMessageAsync;
@@ -113,17 +123,27 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
     {
         Mutate(() => _tracker.GameLaunching(game), nameof(OnGameLaunching));
         RequestArtwork(game);
+        RequestStats(game);
     }
 
     public void OnGameLaunched(GameInfo game)
     {
         Mutate(() => _tracker.GameLaunched(game), nameof(OnGameLaunched));
         RequestArtwork(game);
+        RequestStats(game);
     }
 
     private bool ArtworkActive => _settings.ArtworkEnabled && _artwork is not null;
 
-    public void OnGameExited() => Mutate(
+    private bool StatsActive => _settings.StatsEnabled && _stats is not null;
+
+    public void OnGameExited()
+    {
+        GameExitedState();
+        RefreshStatsAfterExit();
+    }
+
+    private void GameExitedState() => Mutate(
         () =>
         {
             var changed = _tracker.GameExited(_options.MinimumSessionLength, out var discarded);
@@ -198,6 +218,13 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
             _artworkFetch?.Cancel();
             _artworkFetch?.Dispose();
             _artworkFetch = null;
+        }
+
+        lock (_statsGate)
+        {
+            _statsFetch?.Cancel();
+            _statsFetch?.Dispose();
+            _statsFetch = null;
         }
 
         await _transport.DisposeAsync().ConfigureAwait(false);
@@ -343,6 +370,22 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
             await _transport.PublishAsync(new OutboundMessage(_topics.ArtworkTopic, string.Empty, Retain: true) { Binary = artwork }, stop).ConfigureAwait(false);
         }
 
+        // Stats: same rule as artwork.
+        string? stats;
+        lock (_statsGate)
+        {
+            stats = _lastStats;
+        }
+
+        if (!StatsActive)
+        {
+            await _transport.PublishAsync(new OutboundMessage(_topics.StatsTopic, string.Empty, Retain: true), stop).ConfigureAwait(false);
+        }
+        else if (stats is not null)
+        {
+            await _transport.PublishAsync(new OutboundMessage(_topics.StatsTopic, stats, Retain: true), stop).ConfigureAwait(false);
+        }
+
         if (_settings.CommandsEnabled)
         {
             if (_commands is null)
@@ -355,6 +398,119 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
                 await _transport.SubscribeAsync(_topics.CommandSubscription, stop).ConfigureAwait(false);
                 _log.Log(BridgeLogLevel.Info, $"Accepting commands on {_topics.CommandSubscription}.");
             }
+        }
+    }
+
+    private void RefreshStatsAfterExit()
+    {
+        GameInfo? game;
+        lock (_statsGate)
+        {
+            game = _statsGame;
+        }
+
+        if (game is null || !StatsActive || _stopping.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await Task.Delay(_options.StatsRefreshDelay, _time, _stopping.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                RequestStats(game, refresh: true);
+            },
+            CancellationToken.None);
+    }
+
+    private void RequestStats(GameInfo game, bool refresh = false)
+    {
+        if (!StatsActive || _stopping.IsCancellationRequested)
+        {
+            return;
+        }
+
+        CancellationToken token;
+        lock (_statsGate)
+        {
+            // Launching and launched both ask; the second is a no-op for the same game.
+            // After an exit the same game is read again, unless another one started meanwhile.
+            if (refresh ? _statsGameId != game.Id : _statsGameId == game.Id)
+            {
+                return;
+            }
+
+            _statsGameId = game.Id;
+            _statsGame = game;
+            _statsFetch?.Cancel();
+            _statsFetch?.Dispose();
+            _statsFetch = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
+            token = _statsFetch.Token;
+        }
+
+        // A RetroAchievements refresh goes to the network; never on LaunchBox's thread.
+        _ = Task.Run(() => FetchStatsAsync(game, token), CancellationToken.None);
+    }
+
+    private async Task FetchStatsAsync(GameInfo game, CancellationToken token)
+    {
+        GameStats? stats;
+        try
+        {
+            stats = await _stats!.GetStatsAsync(game.Id, token)
+                .WaitAsync(_options.StatsTimeout, _time, token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+#pragma warning disable CA1031 // Missing stats must never affect the game or the bridge.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _log.Log(BridgeLogLevel.Warning, $"Stats for {game.Title} could not be read.", ex);
+            stats = null;
+        }
+
+        // Unlike artwork, a game without stats publishes "nothing known" rather than
+        // keeping the previous game's: an old top score under a new title would mislead.
+        var payload = StatsPayload.Build(game.Id, game.Title, stats ?? new GameStats(null, null), _time.GetUtcNow());
+        lock (_statsGate)
+        {
+            if (_statsGameId != game.Id || token.IsCancellationRequested)
+            {
+                return; // Another game started meanwhile.
+            }
+
+            _lastStats = payload;
+        }
+
+        try
+        {
+            await _transport.PublishAsync(new OutboundMessage(_topics.StatsTopic, payload, Retain: true), token).ConfigureAwait(false);
+            var what = stats is null || stats.IsEmpty
+                ? "none known"
+                : string.Join(", ", new[]
+                {
+                    stats.Achievements is { } a ? $"achievements {a.Unlocked}/{a.Total} ({a.Mode})" : null,
+                    stats.HighScore is { } h ? $"high score {h.Score} ({h.Name ?? "no name"})" : null,
+                }.OfType<string>());
+            _log.Log(BridgeLogLevel.Info, $"Published stats for {game.Title}: {what}.");
+        }
+#pragma warning disable CA1031 // Not connected: the next connect republishes the latest stats.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _log.Log(BridgeLogLevel.Debug, $"Stats for {game.Title} will be published on reconnect.", ex);
         }
     }
 

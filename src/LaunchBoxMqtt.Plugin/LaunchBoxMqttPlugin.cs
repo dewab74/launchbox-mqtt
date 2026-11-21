@@ -27,6 +27,7 @@ public sealed class LaunchBoxMqttPlugin : IGameLaunchingPlugin, ISystemEventsPlu
                 if (game is not null)
                 {
                     GameArtworkSource.Remember(game);
+                    LaunchBoxGameStats.Remember(game, emulator);
                     b.OnGameLaunching(GameMapper.From(game, app, emulator));
                 }
             },
@@ -37,6 +38,7 @@ public sealed class LaunchBoxMqttPlugin : IGameLaunchingPlugin, ISystemEventsPlu
             b =>
             {
                 GameArtworkSource.Remember(game);
+                LaunchBoxGameStats.Remember(game, emulator);
                 b.OnGameLaunched(GameMapper.From(game, app, emulator));
             },
             nameof(OnAfterGameLaunched));

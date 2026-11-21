@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in game stats (`statsEnabled`, off by default), published as retained
+  JSON on `launchbox/<node>/stats` with two Home Assistant sensors:
+  "Achievements" (RetroAchievements progress through LaunchBox's achievement
+  manager; points filled from the catalog when the summary has none) and
+  "High score" (this PC's own MAME high score table, decoded by LaunchBox's
+  bundled hi2txt, factory defaults removed, top 5 as attributes; never an
+  online leaderboard). Read on launch and again a few seconds after the game
+  exits, off LaunchBox's thread with a 45 s limit; republished on reconnect;
+  cleared and removed when turned off.
+- Settings window: "Publish game stats".
+- A second entry point (`GameStatsPlugin`) receives LaunchBox's achievement
+  service, so a LaunchBox without it only loses achievements.
+
 ## [0.3.0] - 2026-11-20
 
 ### Added
