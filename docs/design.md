@@ -1,10 +1,11 @@
 # Design: LaunchBox/BigBox → MQTT plugin
 
-Status: **milestones 1 and 2 done** (2026-11-20): repo, baseline, CI,
-`LaunchBoxMqtt.Core` with tests, and the plugin shell verified end to end on a
-real cabinet (LaunchBox/BigBox 14.1.0.5 → Home Assistant Mosquitto over TLS →
-discovered entities). Written as a plan on 2026-11-20 and kept
-current here; update it when the design changes.
+Status: **milestones 1–3 done** (2026-11-20; v0.1.0 release pending): repo,
+baseline, CI, `LaunchBoxMqtt.Core` with tests, the plugin shell verified end to
+end on a real cabinet (LaunchBox/BigBox 14.1.0.5 → Home Assistant Mosquitto
+over TLS → discovered entities), and a settings window verified on the same
+cabinet. Written as a plan on 2026-11-20 and kept current here; update it when
+the design changes.
 
 ## Why
 
@@ -143,6 +144,38 @@ Verified on BigBox 14.1.0.5 on 2026-11-20 (the plugin log records every event):
   must use the intermediates the TLS stack received, not just the leaf (fixed,
   with a test); rejections now log the reason.
 
+### Settings UI (milestone 3)
+
+- LaunchBox 14.1 has a host-rendered settings form API
+  (`IPluginConfigurationFormsCapability`), shown in **Tools › Manage ›
+  Plugins**. That list contains only plugins with a `manifest.json`
+  (`SchemaVersion: 2`, installed under `LaunchBox\System\Plugins\`), and the
+  manifest component types are all providers (`storefront-provider/1`,
+  `emulator/1`, `playlist-provider/1`, `achievement-provider/1`,
+  `game-data-source/1`, `game-discovery-source/1`, `game-activity-source/1`,
+  `software/1`). There is none for an event plugin, and the host has a
+  "not authorized for manifest-less plugins" policy. A manifest-less plugin
+  implementing the capability loads but is not listed (checked on the cabinet
+  with the "Installed" filter), so that code was removed rather than shipped
+  unverifiable.
+- Instead: `ISystemMenuItemPlugin` adds **LaunchBox MQTT settings…** to
+  LaunchBox's Tools menu (not BigBox's System menu: BigBox is
+  controller-driven). It opens a WinForms window, laid out in code, so the
+  plugin targets `net10.0-windows` (`EnableWindowsTargeting` keeps it building
+  on macOS/Linux).
+- All form logic is in Core (`SettingsForm`: field ids, values ↔ settings,
+  per-field validation, "blank password keeps the stored one";
+  `SettingsFile.Save` writes, then reads back to check). The plugin's
+  `SettingsActions` does load, save (password → secret store, read back; file;
+  live bridge reload) and test (own client id, 10 s timeout).
+- Verified on the cabinet: values load; Test connection succeeds ("MQTT 5")
+  and fails clearly for a bad host ("No such host is known"); Cancel leaves the
+  file untouched; Save rewrites the file without the password and restarts
+  the bridge (offline → online in 70 ms on the wire).
+- Seen once: on one LaunchBox desktop start the first connect took 26 s (all
+  other starts 0.1–0.3 s; no error logged). Possibly thread-pool pressure while
+  LaunchBox starts. Not reproduced; watch for it.
+
 ## Architecture
 
 ```text
@@ -239,7 +272,7 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 
 1. Repo scaffold with the baseline, CI backstop, and Core with tests (no LaunchBox). **Done 2026-11-20.**
 2. Plugin shell: launch/exit events and availability, tested on a real cabinet. **Done 2026-11-20.**
-3. HA discovery and settings UI with the secret store. Tag v0.1.0.
+3. HA discovery and settings UI with the secret store. Tag v0.1.0. **Done 2026-11-20** (release pending).
 4. Reference deployment (above).
 5. v2 commands, opt-in.
 
@@ -249,16 +282,13 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
 - License: MIT.
 - v2 commands: in scope, opt-in and off by default, after v1 (milestone 5).
 
-## Open questions for milestone 3
+## Open questions
 
-- Settings UI: `IPluginConfigurationFormsCapability` is documented as "a
-  capability on an existing plugin component" (schema-version-2 managed
-  components). Check whether LaunchBox shows forms for a manifest-less plugin,
-  or whether a manifest is needed. Keep the settings file either way: it is the
-  headless setup path.
-- Release build in CI: stub reference assembly vs. local build (see
-  "Reference assembly").
+- Release build in CI: a stub reference assembly would allow CI-built
+  releases; for now `scripts/release.sh` builds locally.
 - If LaunchBox and BigBox run at the same time on one PC, both processes load
-  the plugin with the same MQTT client id and would keep disconnecting each
-  other. Decide: per-process client id with one designated publisher, or
-  document "one at a time".
+  the plugin with the same MQTT client id and keep disconnecting each other.
+  Decide: per-process client id with one designated publisher, or document
+  "one at a time".
+- LaunchBox may open its plugin settings API to manifest-less or third-party
+  manifest plugins later; then the host-rendered form can replace the window.

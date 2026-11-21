@@ -41,3 +41,16 @@ project is skipped and only Core builds; see
   throw: put logic in Core, where it can be tested, and keep the plugin shell
   thin.
 - Update `CHANGELOG.md` under `[Unreleased]`.
+
+## Releasing
+
+Releases are cut locally, because the plugin build needs LaunchBox's API DLL,
+which cannot go into CI.
+
+1. Install the build on a real LaunchBox/BigBox and check it: a game launch and
+   exit reach Home Assistant, and the settings window saves and tests.
+2. In `CHANGELOG.md`, rename `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD` and
+   commit (`chore(release): X.Y.Z`). Push it to `main`.
+3. Run `scripts/release.sh X.Y.Z --tested-with <LaunchBox version> --dry-run`,
+   read the notes, then run it without `--dry-run`. It tags `vX.Y.Z`, publishes
+   the zip and its SHA256, then downloads them again to check.

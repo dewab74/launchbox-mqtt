@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using LaunchBoxMqtt.Core.Mqtt;
@@ -24,7 +25,8 @@ public static class SettingsFile
 {
     public const string FileName = "launchbox-mqtt.json";
 
-    private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };
+    // Relaxed escaping keeps the file readable by hand ("LaunchBox's", not "LaunchBox\u0027s"); it is never embedded in HTML.
+    private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private static readonly HashSet<string> KnownKeys = new(StringComparer.Ordinal)
     {
@@ -88,6 +90,37 @@ public static class SettingsFile
         if (JsonNode.Parse(File.ReadAllText(path))!.AsObject().ContainsKey("password"))
         {
             throw new IOException($"{path}: the password is still in the file after rewriting it.");
+        }
+    }
+
+    /// <summary>
+    /// Writes the settings, never the password, and reads them back to check.
+    /// Comments in the existing file are not kept.
+    /// </summary>
+    public static void Save(string path, bool enabled, BridgeSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var root = new JsonObject
+        {
+            ["$comment"] = "launchbox-mqtt settings, written by the settings window (LaunchBox: Tools > LaunchBox MQTT settings). The password is kept in LaunchBox's secret store, not here. Reference: https://github.com/dewab74/launchbox-mqtt#configuration",
+            ["enabled"] = enabled,
+            ["host"] = settings.Host,
+            ["port"] = settings.EffectivePort,
+            ["tls"] = settings.UseTls,
+            ["caCertificatePath"] = settings.CaCertificatePath,
+            ["username"] = settings.Username,
+            ["nodeName"] = settings.NodeName,
+            ["baseTopic"] = settings.BaseTopic,
+            ["discoveryPrefix"] = settings.DiscoveryPrefix,
+            ["discoveryEnabled"] = settings.DiscoveryEnabled,
+        };
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        WriteAtomically(path, root.ToJsonString(WriteOptions));
+
+        var back = Load(path, settings.NodeName);
+        if (back.Enabled != enabled || back.Settings != settings with { Password = null, Port = settings.EffectivePort } || back.PlaintextPassword is not null)
+        {
+            throw new IOException($"{path}: the settings did not read back as written.");
         }
     }
 

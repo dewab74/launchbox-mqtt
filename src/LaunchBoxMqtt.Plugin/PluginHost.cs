@@ -10,6 +10,12 @@ using Unbroken.LaunchBox.Plugins.Services.Storage;
 
 namespace LaunchBoxMqtt.Plugin;
 
+/// <summary>What the plugin was given by LaunchBox at load time.</summary>
+internal sealed record PluginContext(string DataDirectory, PluginLog Log, IPluginSecretStore? Secrets)
+{
+    public string SettingsPath => Path.Combine(DataDirectory, SettingsFile.FileName);
+}
+
 /// <summary>
 /// One bridge per LaunchBox/Big Box process. LaunchBox may create the
 /// entrypoint class more than once (once per plugin interface), so everything
@@ -22,10 +28,10 @@ internal static class PluginHost
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(2);
 
     private static readonly Lock Gate = new();
-    private static bool _initialised;
+    private static readonly SemaphoreSlim Lifecycle = new(1, 1);
+    private static PluginContext? _context;
     private static LaunchBoxBridge? _bridge;
-    private static PluginLog? _log;
-    private static Timer? _statePoll;
+    private static System.Threading.Timer? _statePoll;
 
     public static string Version { get; } =
         typeof(PluginHost).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
@@ -33,67 +39,119 @@ internal static class PluginHost
 
     public static LaunchBoxBridge? Bridge => Volatile.Read(ref _bridge);
 
+    public static PluginContext? Context => Volatile.Read(ref _context);
+
     public static void EnsureStarted(string dataDirectory, IPluginLogger? logger, IPluginSecretStore? secrets, INotificationManager? notifications)
     {
+        PluginContext context;
         lock (Gate)
         {
-            if (_initialised)
+            if (_context is not null)
             {
                 return;
             }
 
-            _initialised = true;
+            Directory.CreateDirectory(dataDirectory);
+            var log = new PluginLog(new FileLog(Path.Combine(dataDirectory, "launchbox-mqtt.log")), logger, notifications);
+            context = new PluginContext(dataDirectory, log, secrets);
+            Volatile.Write(ref _context, context);
         }
 
-        Directory.CreateDirectory(dataDirectory);
-        var log = new PluginLog(new FileLog(Path.Combine(dataDirectory, "launchbox-mqtt.log")), logger, notifications);
-        _log = log;
-        log.Log(BridgeLogLevel.Info, $"launchbox-mqtt {Version} loading in {Environment.ProcessPath} (data: {dataDirectory}).");
+        context.Log.Log(BridgeLogLevel.Info, $"launchbox-mqtt {Version} loading in {Environment.ProcessPath} (data: {dataDirectory}).");
 
         // Settings and the secret store are read off the UI thread; LaunchBox callbacks must stay brief.
-        _ = Task.Run(() => StartAsync(dataDirectory, secrets, log));
+        _ = Task.Run(() => RunLockedAsync(() => StartAsync(context)));
     }
 
+    /// <summary>Stops the bridge and starts it again from the saved settings.</summary>
+    public static Task ReloadAsync(string reason) =>
+        Context is { } context
+            ? RunLockedAsync(async () =>
+            {
+                context.Log.Log(BridgeLogLevel.Info, $"Reloading: {reason}.");
+                await StopBridgeAsync(reason).ConfigureAwait(false);
+                await StartAsync(context).ConfigureAwait(false);
+            })
+            : Task.CompletedTask;
+
+    /// <summary>Called from LaunchBox's shutdown callback: bounded, never throws.</summary>
     public static void Stop(string reason)
     {
-        var bridge = Interlocked.Exchange(ref _bridge, null);
-        _statePoll?.Dispose();
-        if (bridge is null)
-        {
-            return;
-        }
-
-        _log?.Log(BridgeLogLevel.Info, $"Stopping: {reason}.");
         try
         {
-            // Called from LaunchBox's shutdown callback; bounded, and StopAsync never captures the UI context.
-            bridge.StopAsync(StopTimeout).Wait(StopTimeout + TimeSpan.FromSeconds(1));
+            StopBridgeAsync(reason).Wait(StopTimeout + TimeSpan.FromSeconds(1));
         }
 #pragma warning disable CA1031 // Shutdown must not throw into LaunchBox; the Last Will covers a failed stop.
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            _log?.Log(BridgeLogLevel.Warning, "Stop failed.", ex);
+            Context?.Log.Log(BridgeLogLevel.Warning, "Stop failed.", ex);
         }
     }
 
     /// <summary>Runs an event forward, never letting an exception reach LaunchBox.</summary>
     public static void Forward(Action<LaunchBoxBridge> action, string name)
     {
-        _log?.Log(BridgeLogLevel.Debug, $"Event: {name}");
+        Context?.Log.Log(BridgeLogLevel.Debug, $"Event: {name}");
+        ForwardQuietly(action, name);
+    }
+
+    public static async Task<string?> ReadPasswordAsync(CancellationToken cancellationToken)
+    {
+        if (Context?.Secrets is not { } secrets)
+        {
+            return null;
+        }
+
+        var bytes = await secrets.GetValueAsync(new PluginSecretStoreGetRequest(PasswordSecretKey), cancellationToken).ConfigureAwait(false);
+        return bytes is null ? null : Encoding.UTF8.GetString(bytes);
+    }
+
+    /// <summary>Stores the password and checks that it reads back.</summary>
+    public static async Task WritePasswordAsync(string password, CancellationToken cancellationToken)
+    {
+        var secrets = Context?.Secrets
+            ?? throw new InvalidOperationException("LaunchBox did not provide a secret store, so the password cannot be saved.");
+        await secrets.SetValueAsync(new PluginSecretStoreSetRequest(PasswordSecretKey, Encoding.UTF8.GetBytes(password)), cancellationToken).ConfigureAwait(false);
+        if (await ReadPasswordAsync(cancellationToken).ConfigureAwait(false) != password)
+        {
+            throw new InvalidOperationException("The password did not read back from LaunchBox's secret store.");
+        }
+    }
+
+    public static async Task RemovePasswordAsync(CancellationToken cancellationToken)
+    {
+        if (Context?.Secrets is { } secrets)
+        {
+            await secrets.RemoveValueAsync(new PluginSecretStoreRemoveRequest(PasswordSecretKey), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task RunLockedAsync(Func<Task> action)
+    {
+        await Lifecycle.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (Bridge is { } bridge)
-            {
-                action(bridge);
-            }
+            await action().ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // LaunchBox event callbacks must never throw.
-        catch (Exception ex)
-#pragma warning restore CA1031
+        finally
         {
-            _log?.Log(BridgeLogLevel.Error, $"{name} failed.", ex);
+            Lifecycle.Release();
         }
+    }
+
+    private static async Task StopBridgeAsync(string reason)
+    {
+        var bridge = Interlocked.Exchange(ref _bridge, null);
+        Interlocked.Exchange(ref _statePoll, null)?.Dispose();
+        if (bridge is null)
+        {
+            return;
+        }
+
+        Context?.Log.Log(BridgeLogLevel.Info, $"Stopping: {reason}.");
+        await bridge.StopAsync(StopTimeout).ConfigureAwait(false);
+        await bridge.DisposeAsync().ConfigureAwait(false);
     }
 
     // The poll runs every two seconds; logging each run would drown the log.
@@ -106,22 +164,24 @@ internal static class PluginHost
                 action(bridge);
             }
         }
-#pragma warning disable CA1031 // Timer callbacks must never throw.
+#pragma warning disable CA1031 // LaunchBox callbacks and timer callbacks must never throw.
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            _log?.Log(BridgeLogLevel.Error, $"{name} failed.", ex);
+            Context?.Log.Log(BridgeLogLevel.Error, $"{name} failed.", ex);
         }
     }
 
-    private static async Task StartAsync(string dataDirectory, IPluginSecretStore? secrets, PluginLog log)
+    // Caller holds Lifecycle.
+    private static async Task StartAsync(PluginContext context)
     {
+        var log = context.Log;
         try
         {
-            var file = Path.Combine(dataDirectory, SettingsFile.FileName);
+            var file = context.SettingsPath;
             if (SettingsFile.WriteTemplateIfMissing(file, Environment.MachineName))
             {
-                log.Log(BridgeLogLevel.Info, $"Wrote a starter settings file: {file}. Fill it in and restart LaunchBox.");
+                log.Log(BridgeLogLevel.Info, $"Wrote a starter settings file: {file}. Configure it from LaunchBox's Tools menu (LaunchBox MQTT settings…) or edit the file and restart.");
                 return;
             }
 
@@ -132,7 +192,19 @@ internal static class PluginHost
                 return;
             }
 
-            var password = await ResolvePasswordAsync(file, content, secrets, log).ConfigureAwait(false);
+            string? password;
+            if (content.PlaintextPassword is { } plaintext)
+            {
+                await WritePasswordAsync(plaintext, CancellationToken.None).ConfigureAwait(false);
+                SettingsFile.RemovePassword(file);
+                log.Log(BridgeLogLevel.Info, "Moved the MQTT password from the settings file into LaunchBox's secret store.");
+                password = plaintext;
+            }
+            else
+            {
+                password = content.Settings.Username is null ? null : await ReadPasswordAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
             var settings = content.Settings with { Password = password };
             var errors = settings.Validate();
             if (errors.Count > 0)
@@ -145,7 +217,7 @@ internal static class PluginHost
             SeedState(bridge);
             bridge.Start();
             Volatile.Write(ref _bridge, bridge);
-            _statePoll = new Timer(_ => PollState(), null, AttractPollInterval, AttractPollInterval);
+            Volatile.Write(ref _statePoll, new System.Threading.Timer(_ => PollState(), null, AttractPollInterval, AttractPollInterval));
         }
 #pragma warning disable CA1031 // A bad settings file must leave LaunchBox running, with the reason shown.
         catch (Exception ex)
@@ -156,40 +228,9 @@ internal static class PluginHost
         }
     }
 
-    private static async Task<string?> ResolvePasswordAsync(string file, SettingsFileContent content, IPluginSecretStore? secrets, PluginLog log)
-    {
-        if (content.PlaintextPassword is { } plaintext)
-        {
-            if (secrets is null)
-            {
-                throw new InvalidOperationException("LaunchBox did not provide a secret store, so the password cannot be moved out of the settings file.");
-            }
-
-            await secrets.SetValueAsync(new PluginSecretStoreSetRequest(PasswordSecretKey, Encoding.UTF8.GetBytes(plaintext)), CancellationToken.None).ConfigureAwait(false);
-            var stored = await secrets.GetValueAsync(new PluginSecretStoreGetRequest(PasswordSecretKey), CancellationToken.None).ConfigureAwait(false);
-            if (stored is null || Encoding.UTF8.GetString(stored) != plaintext)
-            {
-                throw new InvalidOperationException("The password did not read back from LaunchBox's secret store; leaving it in the settings file.");
-            }
-
-            SettingsFile.RemovePassword(file);
-            log.Log(BridgeLogLevel.Info, "Moved the MQTT password from the settings file into LaunchBox's secret store.");
-            return plaintext;
-        }
-
-        if (secrets is null || string.IsNullOrEmpty(content.Settings.Username))
-        {
-            return null;
-        }
-
-        var bytes = await secrets.GetValueAsync(new PluginSecretStoreGetRequest(PasswordSecretKey), CancellationToken.None).ConfigureAwait(false);
-        return bytes is null ? null : Encoding.UTF8.GetString(bytes);
-    }
-
     private static void SeedState(LaunchBoxBridge bridge)
     {
-        var state = PluginHelper.StateManager;
-        if (state is null)
+        if (PluginHelper.StateManager is not { } state)
         {
             return;
         }
@@ -201,8 +242,7 @@ internal static class PluginHost
 
     // There is no system event for attract mode, so it is polled. The lock has events, but polling it too
     // corrects any missed transition.
-    private static void PollState()
-    {
+    private static void PollState() =>
         ForwardQuietly(
             bridge =>
             {
@@ -213,5 +253,4 @@ internal static class PluginHost
                 }
             },
             nameof(PollState));
-    }
 }

@@ -26,6 +26,12 @@ All notable changes to this project are documented here. The format follows
 - Plugin log file `launchbox-mqtt.log` with every received event.
 - `scripts/package-plugin.sh`: builds the plugin zip and SHA256, and fails if
   LaunchBox's own assemblies would be shipped.
+- Settings window in LaunchBox (**Tools › LaunchBox MQTT settings…**) with
+  **Test connection** (connects with the typed values under a separate client
+  id, without saving). Saving applies the settings at once, without restarting
+  LaunchBox. The password goes only to LaunchBox's secret store.
+- `scripts/release.sh`: tags and publishes a release, then re-downloads the
+  assets to check them.
 
 ### Fixed
 

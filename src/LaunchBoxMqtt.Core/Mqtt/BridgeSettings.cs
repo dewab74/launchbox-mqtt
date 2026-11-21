@@ -41,7 +41,14 @@ public sealed record BridgeSettings
 
     public string NodeId => Topics.NodeId.FromName(NodeName);
 
-    public string ClientId => $"launchbox-mqtt-{NodeId}";
+    /// <summary>MQTT client id; defaults to one per node. A connection test uses its own so it cannot kick the running bridge off.</summary>
+    public string ClientId
+    {
+        get => _clientId ?? $"launchbox-mqtt-{NodeId}";
+        init => _clientId = value;
+    }
+
+    private readonly string? _clientId;
 
     public TopicLayout CreateTopicLayout() => new(BaseTopic, DiscoveryPrefix, NodeId);
 

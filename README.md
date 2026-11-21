@@ -14,10 +14,10 @@ state is published when LaunchBox raises an event, not polled.
 
 ## Status
 
-**Early development, not yet released.** The plugin works end to end on
-LaunchBox/BigBox 14.1.0.5 (tested on a real cabinet against Home Assistant's
-Mosquitto broker over TLS). Setup is through a settings file for now; a
-settings screen inside LaunchBox and the first release are next. See
+**Early development.** The plugin works end to end on LaunchBox/BigBox
+14.1.0.5 (tested on a real cabinet against Home Assistant's Mosquitto broker
+over TLS), with a settings window in LaunchBox. Command topics (exit game,
+launch game, BigBox toast) are planned as an opt-in v2. See
 [docs/design.md](docs/design.md#milestones).
 
 Not affiliated with or endorsed by Unbroken Software, the makers of LaunchBox.
@@ -98,20 +98,38 @@ minutes.
 
 ## Install
 
-Not released yet. Releases will be a zip with a SHA256 checksum on the
-[GitHub Releases](https://github.com/dewab74/launchbox-mqtt/releases) page.
-Until then, build the zip yourself (see "Development setup"), then:
+Download `launchbox-mqtt-<version>.zip` and its `.sha256` from
+[GitHub Releases](https://github.com/dewab74/launchbox-mqtt/releases), then:
 
-1. Close LaunchBox and BigBox.
-2. Unpack the zip so the files land in `LaunchBox\Plugins\LaunchBoxMqtt\`.
-3. Start LaunchBox or BigBox once. The plugin writes a starter settings file
-   (below) and does nothing else until you fill it in.
+1. Check the download (PowerShell):
+   `(Get-FileHash .\launchbox-mqtt-<version>.zip).Hash` must equal the value
+   in the `.sha256` file.
+2. Close LaunchBox and BigBox.
+3. Unpack the zip so the files land in `LaunchBox\Plugins\LaunchBoxMqtt\`.
+4. Start LaunchBox and open **Tools › LaunchBox MQTT settings…** (below).
+
+To update, repeat with LaunchBox and BigBox closed; settings and the saved
+password are kept. To uninstall, delete `LaunchBox\Plugins\LaunchBoxMqtt\`
+(and `LaunchBox\Local\Plugins\.data\LaunchBoxMqtt\` for the settings and
+log). Home Assistant then shows the device as unavailable; delete it there.
 
 ## Configuration
 
-Settings live in
+In LaunchBox, open **Tools › LaunchBox MQTT settings…**. Fill in the broker,
+tick **Publish to MQTT**, use **Test connection** to check the values without
+saving them, then **Save**. Saving applies the settings at once; there is no
+need to restart LaunchBox. BigBox uses the same settings.
+
+The window is LaunchBox-only. LaunchBox 14.1 shows its built-in plugin settings
+pages only for catalog plugins, so this plugin brings its own.
+
+### Settings file (headless setup)
+
+The window writes
 `LaunchBox\Local\Plugins\.data\LaunchBoxMqtt\files\launchbox-mqtt.json`.
-Edit it, set `"enabled": true`, and restart LaunchBox/BigBox.
+You can also write that file yourself, for example from a setup script, then
+restart LaunchBox/BigBox. The plugin writes a disabled starter file on first
+start.
 
 ```json
 {
@@ -142,7 +160,8 @@ Edit it, set `"enabled": true`, and restart LaunchBox/BigBox.
 | `discoveryPrefix` | `homeassistant` | |
 | `discoveryEnabled` | `true` | |
 
-**The password does not stay in the file.** On the next start the plugin moves
+**The password does not stay in the file.** The settings window never writes
+it there. If you put one in the file, the next start moves
 it into LaunchBox's plugin secret store (protected for this Windows machine),
 checks it reads back, and removes it from the file. To change it, write the new
 one into the file again. Keys are case-sensitive, and an unknown key is an
@@ -196,6 +215,9 @@ and only Core builds. Then:
 ```bash
 scripts/package-plugin.sh 0.1.0-dev.1   # -> artifacts/launchbox-mqtt-<version>.zip + .sha256
 ```
+
+Releases are cut locally with `scripts/release.sh X.Y.Z --tested-with <LaunchBox
+version>` (try `--dry-run` first); see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## Tests
 
