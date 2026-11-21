@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-20
+
 ### Added
 
 - Opt-in commands (`commandsEnabled`, off by default): `launch_game` with a
@@ -16,6 +18,8 @@ All notable changes to this project are documented here. The format follows
   Home Assistant discovery adds an "Exit game" button and a "Launch game (id)"
   text entity, and removes them again when commands are turned off.
 - "Accept commands" in the settings window.
+- Retained command messages are refused even when delivered live (MQTT 5
+  retain-as-published).
 
 ### Fixed
 
@@ -51,5 +55,6 @@ All notable changes to this project are documented here. The format follows
 - `scripts/release.sh`: tags and publishes a release, then re-downloads the
   assets to check them.
 
-[Unreleased]: https://github.com/dewab74/launchbox-mqtt/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dewab74/launchbox-mqtt/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dewab74/launchbox-mqtt/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dewab74/launchbox-mqtt/releases/tag/v0.1.0
