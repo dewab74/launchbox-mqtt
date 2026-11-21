@@ -42,10 +42,18 @@ die() {
 tag="v$version"
 
 # ---- Preconditions --------------------------------------------------------
-[[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || die "not on main"
-[[ -z "$(git status --porcelain)" ]] || die "working tree is not clean"
+# A dry run may precede pushing the release commit, so these only warn there.
+require() {
+  if $dry_run; then
+    echo "warning (dry run): $*" >&2
+  else
+    die "$*"
+  fi
+}
+[[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || require "not on main"
+[[ -z "$(git status --porcelain)" ]] || require "working tree is not clean"
 git fetch --quiet origin main
-[[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || die "main is not in sync with origin/main"
+[[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || require "main is not in sync with origin/main"
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null || git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
   die "tag $tag already exists"
 fi
@@ -53,6 +61,7 @@ fi
 notes="$(awk -v v="$version" '
   $0 ~ "^## \\[" v "\\]" { on = 1; next }
   on && /^## \[/ { exit }
+  on && /^\[[^]]+\]: / { next }
   on { print }
 ' CHANGELOG.md)"
 [[ -n "${notes//[[:space:]]/}" ]] || die "CHANGELOG.md has no '## [$version]' section"
