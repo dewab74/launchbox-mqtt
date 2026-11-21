@@ -1,6 +1,6 @@
 # Design: LaunchBox/BigBox → MQTT plugin
 
-Status: **milestones 1–5 done** (2026-11-20; v0.1.0 and v0.2.0 released): repo,
+Status: **milestones 1–5 done** (2026-11-20; v0.1.0, v0.2.0 and v0.3.0 released): repo,
 baseline, CI, `LaunchBoxMqtt.Core` with tests, the plugin shell verified end to
 end on a real cabinet (LaunchBox/BigBox 14.1.0.5 → Home Assistant Mosquitto
 over TLS → discovered entities), and a settings window verified on the same
@@ -347,7 +347,8 @@ lights while Playing, a play-time history, and a BigBox toast ("dinner in
    now-playing chip switched to the plugin's entities, the SSH poll removed.
 5. v2 commands, opt-in. **Done 2026-11-20**, released in v0.2.0 (exit game,
    launch game; no Big Box toast: no API).
-6. Possible: game stats (RetroAchievements progress, MAME community
+6. Artwork as a Home Assistant image. **Done 2026-11-20**, released in v0.3.0.
+7. Possible: game stats (RetroAchievements progress, MAME community
    leaderboard top score, MAME coin/start events). See "Game stats" above.
 
 ## Decisions (settled 2026-11-20)
