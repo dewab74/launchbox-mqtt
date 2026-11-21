@@ -46,8 +46,25 @@ Not affiliated with or endorsed by Unbroken Software, the makers of LaunchBox.
 The device shows as unavailable when LaunchBox exits or the PC loses power
 (MQTT Last Will).
 
-With commands enabled (below) two more entities appear: **Exit game** (button)
+With artwork enabled (below) an **Artwork** image entity shows the current
+game's picture. With commands enabled (below) two more entities appear: **Exit game** (button)
 and **Launch game (id)** (text; set it to a LaunchBox game id).
+
+## Artwork (opt-in)
+
+Off by default. Turn on **Publish game artwork** in the settings window (or
+`"artworkEnabled": true`). When a game launches, the plugin takes the game's
+selected **arcade marquee** from LaunchBox, or else its **clear logo**, or else
+its **box front**. It scales it down to **Artwork max width** (default 800 px;
+`artworkMaxWidth`, 64-2048) and publishes it as PNG, keeping transparency, on
+`launchbox/<node>/artwork`, retained. Home Assistant shows it as an MQTT image
+entity, ready for a picture card.
+
+- The image file is read and scaled on a worker thread; a launch is never
+  slowed. Only the image bytes are sent, never a file path.
+- A game without artwork keeps the previous image. Anything still over 2 MB
+  after scaling is skipped (lower the width).
+- Turning artwork off removes the entity and clears the retained image.
 
 ## Commands (opt-in)
 
@@ -97,6 +114,7 @@ and a PC named `COCKTAIL` (node id `cocktail`):
 | --- | --- | --- |
 | `launchbox/cocktail/state` | yes | JSON state document, below |
 | `launchbox/cocktail/availability` | yes | `online` / `offline` |
+| `launchbox/cocktail/artwork` | yes | PNG bytes of the current game's artwork (when enabled) |
 | `homeassistant/<component>/launchbox_cocktail/<object>/config` | yes | Discovery configs |
 
 The node id is the PC name, lower-cased, with anything outside `a-z 0-9 _ -`
@@ -202,6 +220,8 @@ start.
 | `discoveryPrefix` | `homeassistant` | |
 | `discoveryEnabled` | `true` | |
 | `commandsEnabled` | `false` | Accept commands; see "Commands" |
+| `artworkEnabled` | `false` | Publish game artwork; see "Artwork" |
+| `artworkMaxWidth` | `800` | Pixels, 64-2048 |
 
 **The password does not stay in the file.** The settings window never writes
 it there. If you put one in the file, the next start moves

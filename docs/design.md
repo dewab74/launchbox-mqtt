@@ -199,6 +199,20 @@ Verified on BigBox 14.1.0.5 on 2026-11-20 (the plugin log records every event):
   30 s timeout; outcome on `command_result`, not retained), discovery adds a
   button and a text entity, or empties their configs so they disappear.
 
+### Artwork (v0.3.0)
+
+- `IGame.MarqueeImagePath`, `ClearLogoImagePath`, `FrontImagePath` give
+  LaunchBox's selected images. The reference cabinet has 677 Arcade marquees
+  (3 KB to 9.8 MB, median 867 KB), 763 clear logos and 271 box fronts.
+- The plugin reads those paths in the launch callbacks (LaunchBox's thread);
+  a worker thread decodes with GDI+, scales down to `artworkMaxWidth`
+  (high-quality bicubic, transparent background) and encodes PNG. Core decides
+  when to publish (latest game wins, deduplicated between launching and
+  launched, 30 s timeout, 2 MB cap, kept on reconnect) through
+  `IArtworkSource`, so the rules are tested without Windows.
+- Home Assistant's MQTT `image` platform takes raw bytes on `image_topic` with
+  `content_type: image/png`; no web server or URL is needed.
+
 ### Game stats: what LaunchBox exposes (probe, 2026-11-20)
 
 A temporary read-only probe (commit cc60459, removed before v0.2.0) logged

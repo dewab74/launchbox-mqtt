@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
+using LaunchBoxMqtt.Core.Artwork;
 using LaunchBoxMqtt.Core.Commands;
 using LaunchBoxMqtt.Core.Discovery;
 using LaunchBoxMqtt.Core.Mqtt;
@@ -36,6 +37,14 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
     private readonly ICommandHandler? _commands;
     private readonly SemaphoreSlim _commandSlot = new(1, 1);
     private DateTimeOffset _lastCommandAt = DateTimeOffset.MinValue;
+    private readonly IArtworkSource? _artwork;
+    private readonly Lock _artworkGate = new();
+    private string? _artworkGameId;
+    private byte[]? _lastArtwork;
+    private CancellationTokenSource? _artworkFetch;
+
+    /// <summary>Larger artwork (after scaling) is not published.</summary>
+    public const int MaxArtworkBytes = 2 * 1024 * 1024;
     private readonly Channel<byte> _wake = Channel.CreateBounded<byte>(
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
 
@@ -51,7 +60,8 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         string version,
         TimeProvider? time = null,
         BridgeOptions? options = null,
-        ICommandHandler? commands = null)
+        ICommandHandler? commands = null,
+        IArtworkSource? artwork = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(transport);
@@ -71,7 +81,13 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         var topics = settings.CreateTopicLayout();
         _topics = topics;
         _commands = commands;
-        _discovery = new DiscoveryBuilder(topics, settings.NodeName.Trim(), version, settings.CommandsEnabled && commands is not null);
+        _artwork = artwork;
+        _discovery = new DiscoveryBuilder(
+            topics,
+            settings.NodeName.Trim(),
+            version,
+            commandsEnabled: settings.CommandsEnabled && commands is not null,
+            artworkEnabled: ArtworkActive);
         _stateTopic = topics.StateTopic;
         _availabilityTopic = topics.AvailabilityTopic;
         _transport.MessageReceived += OnMessageAsync;
@@ -93,9 +109,19 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         _loop = Task.Run(() => RunAsync(_stopping.Token));
     }
 
-    public void OnGameLaunching(GameInfo game) => Mutate(() => _tracker.GameLaunching(game), nameof(OnGameLaunching));
+    public void OnGameLaunching(GameInfo game)
+    {
+        Mutate(() => _tracker.GameLaunching(game), nameof(OnGameLaunching));
+        RequestArtwork(game);
+    }
 
-    public void OnGameLaunched(GameInfo game) => Mutate(() => _tracker.GameLaunched(game), nameof(OnGameLaunched));
+    public void OnGameLaunched(GameInfo game)
+    {
+        Mutate(() => _tracker.GameLaunched(game), nameof(OnGameLaunched));
+        RequestArtwork(game);
+    }
+
+    private bool ArtworkActive => _settings.ArtworkEnabled && _artwork is not null;
 
     public void OnGameExited() => Mutate(
         () =>
@@ -167,6 +193,13 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         }
 
         _transport.MessageReceived -= OnMessageAsync;
+        lock (_artworkGate)
+        {
+            _artworkFetch?.Cancel();
+            _artworkFetch?.Dispose();
+            _artworkFetch = null;
+        }
+
         await _transport.DisposeAsync().ConfigureAwait(false);
         _stopping.Dispose();
         _commandSlot.Dispose();
@@ -293,6 +326,23 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
         await PublishStateAsync(stop).ConfigureAwait(false);
         await _transport.PublishAsync(new OutboundMessage(_availabilityTopic, Availability.Online, Retain: true), stop).ConfigureAwait(false);
 
+        // Artwork: republish the current image (the broker may have lost it), or clear a stale
+        // retained one when artwork is off so nothing old lingers for other subscribers.
+        byte[]? artwork;
+        lock (_artworkGate)
+        {
+            artwork = _lastArtwork;
+        }
+
+        if (!ArtworkActive)
+        {
+            await _transport.PublishAsync(new OutboundMessage(_topics.ArtworkTopic, string.Empty, Retain: true), stop).ConfigureAwait(false);
+        }
+        else if (artwork is not null)
+        {
+            await _transport.PublishAsync(new OutboundMessage(_topics.ArtworkTopic, string.Empty, Retain: true) { Binary = artwork }, stop).ConfigureAwait(false);
+        }
+
         if (_settings.CommandsEnabled)
         {
             if (_commands is null)
@@ -305,6 +355,89 @@ public sealed class LaunchBoxBridge : IAsyncDisposable
                 await _transport.SubscribeAsync(_topics.CommandSubscription, stop).ConfigureAwait(false);
                 _log.Log(BridgeLogLevel.Info, $"Accepting commands on {_topics.CommandSubscription}.");
             }
+        }
+    }
+
+    private void RequestArtwork(GameInfo game)
+    {
+        if (!ArtworkActive || _stopping.IsCancellationRequested)
+        {
+            return;
+        }
+
+        CancellationToken token;
+        lock (_artworkGate)
+        {
+            // Launching and launched both ask; the second is a no-op for the same game.
+            if (_artworkGameId == game.Id)
+            {
+                return;
+            }
+
+            _artworkGameId = game.Id;
+            _artworkFetch?.Cancel();
+            _artworkFetch?.Dispose();
+            _artworkFetch = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
+            token = _artworkFetch.Token;
+        }
+
+        // Decoding and scaling an image can take a moment; never on LaunchBox's thread.
+        _ = Task.Run(() => FetchArtworkAsync(game, token), CancellationToken.None);
+    }
+
+    private async Task FetchArtworkAsync(GameInfo game, CancellationToken token)
+    {
+        ArtworkImage? image;
+        try
+        {
+            image = await _artwork!.GetArtworkAsync(game.Id, _settings.ArtworkMaxWidth, token)
+                .WaitAsync(_options.ArtworkTimeout, _time, token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+#pragma warning disable CA1031 // Missing or broken artwork must never affect the game or the bridge.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _log.Log(BridgeLogLevel.Warning, $"Artwork for {game.Title} could not be read.", ex);
+            return;
+        }
+
+        if (image is null)
+        {
+            _log.Log(BridgeLogLevel.Info, $"No artwork for {game.Title}; keeping the previous image.");
+            return;
+        }
+
+        if (image.Png.Length > MaxArtworkBytes)
+        {
+            _log.Log(BridgeLogLevel.Warning, $"Artwork for {game.Title} is {image.Png.Length / 1024} KB after scaling; not published (limit {MaxArtworkBytes / 1024} KB). Lower the artwork width.");
+            return;
+        }
+
+        lock (_artworkGate)
+        {
+            if (_artworkGameId != game.Id || token.IsCancellationRequested)
+            {
+                return; // Another game started meanwhile.
+            }
+
+            _lastArtwork = image.Png;
+        }
+
+        try
+        {
+            await _transport.PublishAsync(new OutboundMessage(_topics.ArtworkTopic, string.Empty, Retain: true) { Binary = image.Png }, token).ConfigureAwait(false);
+            _log.Log(BridgeLogLevel.Info, $"Published artwork for {game.Title}: {image.Kind} {image.Width}x{image.Height}, {image.Png.Length / 1024} KB.");
+        }
+#pragma warning disable CA1031 // Not connected: the next connect republishes the latest image.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            _log.Log(BridgeLogLevel.Debug, $"Artwork for {game.Title} will be published on reconnect.", ex);
         }
     }
 

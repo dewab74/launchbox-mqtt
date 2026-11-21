@@ -21,6 +21,14 @@ internal sealed class SettingsDialog : Form
     private readonly CheckBox _discovery = new() { Text = "Home Assistant discovery", AutoSize = true };
     private readonly TextBox _discoveryPrefix = new() { Width = 320 };
     private readonly TextBox _baseTopic = new() { Width = 320 };
+    private readonly CheckBox _artwork = new() { Text = "Publish game artwork (marquee, else clear logo, else box front)", AutoSize = true };
+    private readonly NumericUpDown _artworkWidth = new()
+    {
+        Minimum = LaunchBoxMqtt.Core.Mqtt.BridgeSettings.MinArtworkMaxWidth,
+        Maximum = LaunchBoxMqtt.Core.Mqtt.BridgeSettings.MaxArtworkMaxWidth,
+        Increment = 64,
+        Width = 100,
+    };
     private readonly CheckBox _commands = new() { Text = "Accept commands (exit game, launch game by id)", AutoSize = true };
     private readonly Label _commandsWarning = new()
     {
@@ -65,6 +73,8 @@ internal sealed class SettingsDialog : Form
             [SettingsForm.DiscoveryPrefix] = _discoveryPrefix,
             [SettingsForm.BaseTopic] = _baseTopic,
             [SettingsForm.CommandsEnabled] = _commands,
+            [SettingsForm.ArtworkEnabled] = _artwork,
+            [SettingsForm.ArtworkMaxWidth] = _artworkWidth,
         };
 
         var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
@@ -99,6 +109,8 @@ internal sealed class SettingsDialog : Form
         Row(string.Empty, _discovery);
         Row("Discovery prefix", _discoveryPrefix);
         Row("Base topic", _baseTopic);
+        Row(string.Empty, _artwork);
+        Row("Artwork max width (px)", _artworkWidth);
         Heading("Commands");
         Row(string.Empty, _commands);
         Row(string.Empty, _commandsWarning);
@@ -109,6 +121,7 @@ internal sealed class SettingsDialog : Form
         Controls.Add(grid);
 
         _tls.CheckedChanged += (_, _) => UpdateTlsFields();
+        _artwork.CheckedChanged += (_, _) => _artworkWidth.Enabled = _artwork.Checked;
         _browse.Click += (_, _) => BrowseForCa();
         _test.Click += async (_, _) => await RunAsync(SettingsActions.TestAsync, closeOnSuccess: false).ConfigureAwait(true);
         _save.Click += async (_, _) => await RunAsync(SettingsActions.SaveAsync, closeOnSuccess: true).ConfigureAwait(true);
@@ -146,6 +159,12 @@ internal sealed class SettingsDialog : Form
             _discoveryPrefix.Text = V(SettingsForm.DiscoveryPrefix);
             _baseTopic.Text = V(SettingsForm.BaseTopic);
             _commands.Checked = V(SettingsForm.CommandsEnabled) == "true";
+            _artwork.Checked = V(SettingsForm.ArtworkEnabled) == "true";
+            _artworkWidth.Value = Math.Clamp(
+                int.TryParse(V(SettingsForm.ArtworkMaxWidth), NumberStyles.None, CultureInfo.InvariantCulture, out var w) ? w : LaunchBoxMqtt.Core.Mqtt.BridgeSettings.DefaultArtworkMaxWidth,
+                (int)_artworkWidth.Minimum,
+                (int)_artworkWidth.Maximum);
+            _artworkWidth.Enabled = _artwork.Checked;
             UpdateTlsFields();
             SetBusy(false, string.Empty);
         }
@@ -209,6 +228,8 @@ internal sealed class SettingsDialog : Form
         [SettingsForm.DiscoveryPrefix] = _discoveryPrefix.Text,
         [SettingsForm.BaseTopic] = _baseTopic.Text,
         [SettingsForm.CommandsEnabled] = _commands.Checked ? "true" : "false",
+        [SettingsForm.ArtworkEnabled] = _artwork.Checked ? "true" : "false",
+        [SettingsForm.ArtworkMaxWidth] = ((int)_artworkWidth.Value).ToString(CultureInfo.InvariantCulture),
     };
 
     private void UpdateTlsFields()

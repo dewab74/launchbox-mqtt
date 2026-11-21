@@ -31,7 +31,7 @@ public static class SettingsFile
     private static readonly HashSet<string> KnownKeys = new(StringComparer.Ordinal)
     {
         "enabled", "host", "port", "tls", "caCertificatePath", "username", "password",
-        "nodeName", "baseTopic", "discoveryPrefix", "discoveryEnabled", "commandsEnabled", "$comment",
+        "nodeName", "baseTopic", "discoveryPrefix", "discoveryEnabled", "commandsEnabled", "artworkEnabled", "artworkMaxWidth", "$comment",
     };
 
     /// <summary>Reads and checks the file. Throws <see cref="InvalidDataException"/> with a readable message when it is wrong.</summary>
@@ -71,6 +71,8 @@ public static class SettingsFile
             DiscoveryPrefix = String(root, "discoveryPrefix", path) ?? Topics.TopicLayout.DefaultDiscoveryPrefix,
             DiscoveryEnabled = Bool(root, "discoveryEnabled", path) ?? true,
             CommandsEnabled = Bool(root, "commandsEnabled", path) ?? false,
+            ArtworkEnabled = Bool(root, "artworkEnabled", path) ?? false,
+            ArtworkMaxWidth = Int(root, "artworkMaxWidth", path) ?? BridgeSettings.DefaultArtworkMaxWidth,
         };
 
         var password = String(root, "password", path);
@@ -115,6 +117,8 @@ public static class SettingsFile
             ["discoveryPrefix"] = settings.DiscoveryPrefix,
             ["discoveryEnabled"] = settings.DiscoveryEnabled,
             ["commandsEnabled"] = settings.CommandsEnabled,
+            ["artworkEnabled"] = settings.ArtworkEnabled,
+            ["artworkMaxWidth"] = settings.ArtworkMaxWidth,
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         WriteAtomically(path, root.ToJsonString(WriteOptions));
@@ -149,6 +153,8 @@ public static class SettingsFile
             ["discoveryPrefix"] = Topics.TopicLayout.DefaultDiscoveryPrefix,
             ["discoveryEnabled"] = true,
             ["commandsEnabled"] = false,
+            ["artworkEnabled"] = false,
+            ["artworkMaxWidth"] = BridgeSettings.DefaultArtworkMaxWidth,
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         WriteAtomically(path, template.ToJsonString(WriteOptions));

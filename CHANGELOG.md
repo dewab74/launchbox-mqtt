@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in artwork (`artworkEnabled`, off by default): on launch, the game's
+  arcade marquee, else clear logo, else box front, scaled to
+  `artworkMaxWidth` (default 800 px) and published as PNG, retained, on
+  `launchbox/<node>/artwork`, with a Home Assistant MQTT image entity
+  "Artwork". Read and scaled off LaunchBox's thread; republished on
+  reconnect; cleared and removed when turned off.
+- Settings window: "Publish game artwork" and "Artwork max width".
+
 ## [0.2.0] - 2026-11-20
 
 ### Added

@@ -23,6 +23,8 @@ public sealed class SettingsFormTests : IDisposable
         [SettingsForm.DiscoveryPrefix] = "homeassistant",
         [SettingsForm.DiscoveryEnabled] = "true",
         [SettingsForm.CommandsEnabled] = "true",
+        [SettingsForm.ArtworkEnabled] = "true",
+        [SettingsForm.ArtworkMaxWidth] = "640",
     };
 
     [Fact]
@@ -80,6 +82,8 @@ public sealed class SettingsFormTests : IDisposable
     [InlineData(SettingsForm.BaseTopic, "a/#", SettingsForm.BaseTopic)]
     [InlineData(SettingsForm.DiscoveryPrefix, "/ha", SettingsForm.DiscoveryPrefix)]
     [InlineData(SettingsForm.CaCertificatePath, "/nonexistent/ca.pem", SettingsForm.CaCertificatePath)]
+    [InlineData(SettingsForm.ArtworkMaxWidth, "10", SettingsForm.ArtworkMaxWidth)]
+    [InlineData(SettingsForm.ArtworkMaxWidth, "4096", SettingsForm.ArtworkMaxWidth)]
     public void Bad_values_are_reported_on_their_field(string field, string value, string expectedErrorField)
     {
         var values = Valid();
@@ -144,6 +148,8 @@ public sealed class SettingsFormTests : IDisposable
         var loaded = SettingsFile.Load(path, "PC");
         Assert.True(loaded.Enabled);
         Assert.True(loaded.Settings.CommandsEnabled);
+        Assert.True(loaded.Settings.ArtworkEnabled);
+        Assert.Equal(640, loaded.Settings.ArtworkMaxWidth);
         Assert.Equal("broker.lan", loaded.Settings.Host);
         Assert.Null(loaded.PlaintextPassword);
     }

@@ -26,13 +26,20 @@ public sealed class LaunchBoxMqttPlugin : IGameLaunchingPlugin, ISystemEventsPlu
             {
                 if (game is not null)
                 {
+                    GameArtworkSource.Remember(game);
                     b.OnGameLaunching(GameMapper.From(game, app, emulator));
                 }
             },
             nameof(OnBeforeGameLaunching));
 
     public void OnAfterGameLaunched(IGame game, IAdditionalApplication? app, IEmulator? emulator) =>
-        PluginHost.Forward(b => b.OnGameLaunched(GameMapper.From(game, app, emulator)), nameof(OnAfterGameLaunched));
+        PluginHost.Forward(
+            b =>
+            {
+                GameArtworkSource.Remember(game);
+                b.OnGameLaunched(GameMapper.From(game, app, emulator));
+            },
+            nameof(OnAfterGameLaunched));
 
     public void OnGameExited() =>
         PluginHost.Forward(b => b.OnGameExited(), nameof(OnGameExited));

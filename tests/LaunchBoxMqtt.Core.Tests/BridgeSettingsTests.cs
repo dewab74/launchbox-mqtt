@@ -27,11 +27,12 @@ public class BridgeSettingsTests
             DiscoveryPrefix = "/ha",
             Password = "pw", // pragma: allowlist secret (test value)
             CaCertificatePath = "/nonexistent/ca.pem",
+            ArtworkMaxWidth = 10,
         };
 
         var errors = settings.Validate();
 
-        Assert.Equal(7, errors.Count);
+        Assert.Equal(8, errors.Count);
     }
 
     [Fact]

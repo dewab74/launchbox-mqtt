@@ -19,7 +19,7 @@ public partial class DiscoveryBuilderTests
     {
         var configs = Builder.BuildConfigs();
 
-        Assert.Equal(DiscoveryBuilder.Entities.Count + DiscoveryBuilder.CommandEntities.Count, configs.Count);
+        Assert.Equal(DiscoveryBuilder.Entities.Count + DiscoveryBuilder.CommandEntities.Count + DiscoveryBuilder.ArtworkEntities.Count, configs.Count);
         Assert.All(configs, m => Assert.True(m.Retain));
         Assert.Contains(configs, m => m.Topic == "homeassistant/sensor/launchbox_cocktail/now_playing/config");
         Assert.Contains(configs, m => m.Topic == "homeassistant/binary_sensor/launchbox_cocktail/playing/config");
@@ -29,12 +29,17 @@ public partial class DiscoveryBuilderTests
     [Fact]
     public void Every_config_shares_the_device_and_availability()
     {
-        foreach (var message in new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true).BuildConfigs())
+        foreach (var message in new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true).BuildConfigs())
         {
             using var doc = JsonDocument.Parse(message.Payload);
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("command_topic", out var commandTopic))
+            if (root.TryGetProperty("image_topic", out var imageTopic))
+            {
+                Assert.Equal("launchbox/cocktail/artwork", imageTopic.GetString());
+                Assert.Equal("image/png", root.GetProperty("content_type").GetString());
+            }
+            else if (root.TryGetProperty("command_topic", out var commandTopic))
             {
                 Assert.StartsWith("launchbox/cocktail/command/", commandTopic.GetString(), StringComparison.Ordinal);
                 Assert.False(root.GetProperty("retain").GetBoolean());
@@ -60,7 +65,7 @@ public partial class DiscoveryBuilderTests
     [Fact]
     public void Unique_ids_are_unique()
     {
-        var ids = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true).BuildConfigs()
+        var ids = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true).BuildConfigs()
             .Select(m => JsonElement.Parse(m.Payload).GetProperty("unique_id").GetString())
             .ToList();
         Assert.Equal(ids.Count, ids.Distinct().Count());
@@ -116,6 +121,15 @@ public partial class DiscoveryBuilderTests
         var launch = JsonElement.Parse(on.Single(m => m.Topic.Contains("/text/", StringComparison.Ordinal)).Payload);
         Assert.Equal("launchbox/cocktail/command/launch_game", launch.GetProperty("command_topic").GetString());
         Assert.Matches(launch.GetProperty("pattern").GetString()!, "6f1c2a4e-0000-4000-8000-000000000001");
+    }
+
+    [Fact]
+    public void Artwork_entity_only_while_enabled()
+    {
+        const string topic = "homeassistant/image/launchbox_cocktail/artwork/config";
+        Assert.Equal(string.Empty, Builder.BuildConfigs().Single(m => m.Topic == topic).Payload);
+        var on = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", artworkEnabled: true).BuildConfigs().Single(m => m.Topic == topic);
+        Assert.Equal("launchbox/cocktail/artwork", JsonElement.Parse(on.Payload).GetProperty("image_topic").GetString());
     }
 
     [Fact]

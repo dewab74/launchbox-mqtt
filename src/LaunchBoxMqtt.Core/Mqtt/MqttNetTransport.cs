@@ -76,9 +76,9 @@ public sealed class MqttNetTransport : IMqttTransport
     public async Task PublishAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
-        var mqttMessage = new MqttApplicationMessageBuilder()
-            .WithTopic(message.Topic)
-            .WithPayload(message.Payload)
+        var builder = new MqttApplicationMessageBuilder().WithTopic(message.Topic);
+        builder = message.Binary is { } binary ? builder.WithPayload(binary) : builder.WithPayload(message.Payload);
+        var mqttMessage = builder
             .WithRetainFlag(message.Retain)
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
             .Build();

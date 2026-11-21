@@ -194,6 +194,31 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
 
     // With commands off (the default) their configs are published empty, which deletes the retained
     // message on the broker, so a subscriber sees only the state entities.
+    [Fact]
+    public async Task Binary_artwork_arrives_intact_over_a_real_broker()
+    {
+        await StartBrokerAsync();
+        var bytes = new byte[300_000];
+        new Random(42).NextBytes(bytes);
+        var transport = new MqttNetTransport(Settings());
+        _cleanup.Add(transport);
+        await transport.ConnectAsync(CancellationToken.None);
+        await transport.PublishAsync(new OutboundMessage("launchbox/cocktail/artwork", string.Empty, Retain: true) { Binary = bytes }, CancellationToken.None);
+
+        var received = new TaskCompletionSource<byte[]>();
+        var client = new MqttClientFactory().CreateMqttClient();
+        client.ApplicationMessageReceivedAsync += e =>
+        {
+            received.TrySetResult(System.Buffers.BuffersExtensions.ToArray(e.ApplicationMessage.Payload));
+            return Task.CompletedTask;
+        };
+        await client.ConnectAsync(new MqttClientOptionsBuilder().WithTcpServer("localhost", _port).WithClientId("artwork-observer").Build(), TestContext.Current.CancellationToken);
+        _cleanup.Add(new ClientCleanup(client));
+        await client.SubscribeAsync("launchbox/cocktail/artwork", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(bytes, await received.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+    }
+
     private static int DiscoveryBuilderCount => Discovery.DiscoveryBuilder.Entities.Count;
 
     private async Task<IMqttClient> ConnectObserverAsync(string clientId)

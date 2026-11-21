@@ -23,5 +23,8 @@ public sealed record BridgeOptions
     /// <summary>A command that has not finished after this long is reported as failed.</summary>
     public TimeSpan CommandTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>Reading and scaling one game's artwork may take at most this long.</summary>
+    public TimeSpan ArtworkTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
     public Func<ReconnectBackoff> BackoffFactory { get; init; } = ReconnectBackoff.CreateDefault;
 }

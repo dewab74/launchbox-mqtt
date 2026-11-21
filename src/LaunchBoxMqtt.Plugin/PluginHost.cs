@@ -214,7 +214,8 @@ internal static class PluginHost
                 return;
             }
 
-            var bridge = new LaunchBoxBridge(settings, new MqttNetTransport(settings), log, Version, commands: new LaunchBoxCommandHandler(context.UiContext, log));
+            var bridge = new LaunchBoxBridge(settings, new MqttNetTransport(settings), log, Version, commands: new LaunchBoxCommandHandler(context.UiContext, log),
+                artwork: new GameArtworkSource(log));
             SeedState(bridge);
             bridge.Start();
             Volatile.Write(ref _bridge, bridge);

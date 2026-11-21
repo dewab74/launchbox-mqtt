@@ -35,6 +35,9 @@ public sealed class TopicLayout
 
     public string AvailabilityTopic => $"{BaseTopic}/{Node}/availability";
 
+    /// <summary>The current game's artwork as raw PNG bytes, retained (only when enabled).</summary>
+    public string ArtworkTopic => $"{BaseTopic}/{Node}/artwork";
+
     /// <summary>Commands arrive on <c>&lt;base&gt;/&lt;node&gt;/command/&lt;name&gt;</c> (only when enabled).</summary>
     public string CommandTopicPrefix => $"{BaseTopic}/{Node}/command/";
 

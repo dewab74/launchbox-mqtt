@@ -18,8 +18,9 @@ public sealed class DiscoveryBuilder
     private readonly string _displayName;
     private readonly string _version;
     private readonly bool _commandsEnabled;
+    private readonly bool _artworkEnabled;
 
-    public DiscoveryBuilder(TopicLayout topics, string displayName, string version, bool commandsEnabled = false)
+    public DiscoveryBuilder(TopicLayout topics, string displayName, string version, bool commandsEnabled = false, bool artworkEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(topics);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
@@ -28,6 +29,7 @@ public sealed class DiscoveryBuilder
         _displayName = displayName;
         _version = version;
         _commandsEnabled = commandsEnabled;
+        _artworkEnabled = artworkEnabled;
     }
 
     /// <summary>The entities, in a fixed order. The object id is also the unique-id suffix.</summary>
@@ -95,9 +97,20 @@ public sealed class DiscoveryBuilder
         },
     ];
 
+    /// <summary>The artwork image entity, only discovered while artwork is enabled.</summary>
+    public static IReadOnlyList<EntityDefinition> ArtworkEntities { get; } =
+    [
+        new("image", "artwork", "Artwork", ValueTemplate: null)
+        {
+            Icon = "mdi:image-frame",
+            IsImage = true,
+        },
+    ];
+
     /// <summary>
     /// The retained config messages that create the device and its entities,
-    /// plus either the command entities or empty configs that remove them.
+    /// plus either the optional entities (commands, artwork) or empty configs
+    /// that remove them.
     /// </summary>
     public IReadOnlyList<OutboundMessage> BuildConfigs() =>
         [
@@ -105,6 +118,10 @@ public sealed class DiscoveryBuilder
             .. CommandEntities.Select(e => new OutboundMessage(
                 _topics.DiscoveryTopic(e.Component, e.ObjectId),
                 _commandsEnabled ? BuildConfig(e).ToJsonString() : string.Empty,
+                Retain: true)),
+            .. ArtworkEntities.Select(e => new OutboundMessage(
+                _topics.DiscoveryTopic(e.Component, e.ObjectId),
+                _artworkEnabled ? BuildConfig(e).ToJsonString() : string.Empty,
                 Retain: true)),
         ];
 
@@ -114,7 +131,7 @@ public sealed class DiscoveryBuilder
     /// and when discovery is switched off.
     /// </summary>
     public IReadOnlyList<OutboundMessage> BuildRemovals() =>
-        [.. Entities.Concat(CommandEntities).Select(e => new OutboundMessage(_topics.DiscoveryTopic(e.Component, e.ObjectId), string.Empty, Retain: true))];
+        [.. Entities.Concat(CommandEntities).Concat(ArtworkEntities).Select(e => new OutboundMessage(_topics.DiscoveryTopic(e.Component, e.ObjectId), string.Empty, Retain: true))];
 
     internal JsonObject BuildConfig(EntityDefinition entity)
     {
@@ -140,7 +157,12 @@ public sealed class DiscoveryBuilder
             },
         };
 
-        if (entity.CommandTopicName is { } command)
+        if (entity.IsImage)
+        {
+            config["image_topic"] = _topics.ArtworkTopic;
+            config["content_type"] = "image/png";
+        }
+        else if (entity.CommandTopicName is { } command)
         {
             config["command_topic"] = _topics.CommandTopic(command);
             config["retain"] = false;
@@ -189,6 +211,9 @@ public sealed record EntityDefinition(string Component, string ObjectId, string 
 {
     /// <summary>For command entities: the command topic name; they then have no state topic.</summary>
     public string? CommandTopicName { get; init; }
+
+    /// <summary>An MQTT image entity fed raw bytes on the artwork topic.</summary>
+    public bool IsImage { get; init; }
 
     /// <summary>For text entities: the allowed input.</summary>
     public string? Pattern { get; init; }

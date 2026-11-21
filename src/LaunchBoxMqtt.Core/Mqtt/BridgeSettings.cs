@@ -44,6 +44,16 @@ public sealed record BridgeSettings
     /// </summary>
     public bool CommandsEnabled { get; init; }
 
+    public const int DefaultArtworkMaxWidth = 800;
+    public const int MinArtworkMaxWidth = 64;
+    public const int MaxArtworkMaxWidth = 2048;
+
+    /// <summary>Publish the game's artwork (marquee, else clear logo, else box front) as an image entity.</summary>
+    public bool ArtworkEnabled { get; init; }
+
+    /// <summary>Artwork wider than this is scaled down before publishing.</summary>
+    public int ArtworkMaxWidth { get; init; } = DefaultArtworkMaxWidth;
+
     public int EffectivePort => Port ?? (UseTls ? DefaultTlsPort : DefaultPort);
 
     public string NodeId => Topics.NodeId.FromName(NodeName);
@@ -88,6 +98,11 @@ public sealed record BridgeSettings
             errors.Add("A password was given without a username.");
         }
 
+        if (ArtworkMaxWidth is < MinArtworkMaxWidth or > MaxArtworkMaxWidth)
+        {
+            errors.Add($"Artwork width {ArtworkMaxWidth} is outside {MinArtworkMaxWidth}-{MaxArtworkMaxWidth}.");
+        }
+
         if (CaCertificatePath is { Length: > 0 } && !UseTls)
         {
             errors.Add("A CA certificate was given but TLS is off.");
@@ -103,5 +118,5 @@ public sealed record BridgeSettings
 
     // The password must never reach a log line through record ToString().
     public override string ToString() =>
-        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")} commands={(CommandsEnabled ? "on" : "off")}";
+        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")} commands={(CommandsEnabled ? "on" : "off")} artwork={(ArtworkEnabled ? ArtworkMaxWidth + "px" : "off")}";
 }

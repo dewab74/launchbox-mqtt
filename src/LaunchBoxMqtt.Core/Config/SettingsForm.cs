@@ -37,6 +37,8 @@ public static class SettingsForm
     public const string DiscoveryPrefix = "discoveryPrefix";
     public const string DiscoveryEnabled = "discoveryEnabled";
     public const string CommandsEnabled = "commandsEnabled";
+    public const string ArtworkEnabled = "artworkEnabled";
+    public const string ArtworkMaxWidth = "artworkMaxWidth";
 
     /// <summary>Initial form values from the current settings (no password).</summary>
     public static IReadOnlyDictionary<string, string> ToValues(bool enabled, BridgeSettings settings)
@@ -55,6 +57,8 @@ public static class SettingsForm
             [DiscoveryPrefix] = settings.DiscoveryPrefix,
             [DiscoveryEnabled] = Bool(settings.DiscoveryEnabled),
             [CommandsEnabled] = Bool(settings.CommandsEnabled),
+            [ArtworkEnabled] = Bool(settings.ArtworkEnabled),
+            [ArtworkMaxWidth] = settings.ArtworkMaxWidth.ToString(CultureInfo.InvariantCulture),
         };
     }
 
@@ -125,6 +129,15 @@ public static class SettingsForm
             errors[DiscoveryPrefix] = $"The prefix {discoveryError}.";
         }
 
+        var artworkWidth = BridgeSettings.DefaultArtworkMaxWidth;
+        var widthText = Get(ArtworkMaxWidth);
+        if (widthText.Length > 0
+            && !(int.TryParse(widthText, NumberStyles.None, CultureInfo.InvariantCulture, out artworkWidth)
+                 && artworkWidth is >= BridgeSettings.MinArtworkMaxWidth and <= BridgeSettings.MaxArtworkMaxWidth))
+        {
+            errors[ArtworkMaxWidth] = $"Enter a width between {BridgeSettings.MinArtworkMaxWidth} and {BridgeSettings.MaxArtworkMaxWidth} pixels.";
+        }
+
         if (errors.Count > 0)
         {
             return new SettingsFormSubmission(enabled, null, password, errors);
@@ -143,6 +156,8 @@ public static class SettingsForm
             DiscoveryPrefix = discoveryPrefix,
             DiscoveryEnabled = GetBool(DiscoveryEnabled, true),
             CommandsEnabled = GetBool(CommandsEnabled, false),
+            ArtworkEnabled = GetBool(ArtworkEnabled, false),
+            ArtworkMaxWidth = artworkWidth,
         };
         return new SettingsFormSubmission(enabled, settings, password, errors);
     }
