@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format follows
   reconnect; cleared and removed when turned off.
 - Settings window: "Publish game artwork" and "Artwork max width".
 
+### Fixed
+
+- `launch_game` could not launch games whose LaunchBox id is stored in
+  uppercase ("no game with id … in the LaunchBox library"): LaunchBox's
+  lookup is case-sensitive. Ids now match in any case.
+
 ## [0.2.0] - 2026-11-20
 
 ### Added

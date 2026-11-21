@@ -75,7 +75,7 @@ broker account and restrict who may publish to its topics.
 
 | Topic | Payload | Does |
 | --- | --- | --- |
-| `launchbox/<node>/command/launch_game` | a LaunchBox game id (GUID), or `{"id": "<GUID>"}` | Launches that library game through LaunchBox's normal launch, as if picked in Big Box. Refused while a game is running or if the id is not in the library |
+| `launchbox/<node>/command/launch_game` | a LaunchBox game id (GUID, any case), or `{"id": "<GUID>"}` | Launches that library game through LaunchBox's normal launch, as if picked in Big Box. Refused while a game is running or if the id is not in the library |
 | `launchbox/<node>/command/exit_game` | anything | Asks the running game to close, like Alt+F4, so emulators save as usual. Only processes Big Box started are touched, and nothing is ever killed |
 
 Safety rules:

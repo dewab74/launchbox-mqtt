@@ -30,7 +30,16 @@ internal sealed class LaunchBoxCommandHandler(SynchronizationContext? ui, Plugin
         }
 
         var id = command.GameId.ToString("D");
-        var game = PluginHelper.DataManager?.GetGameById(id);
+        var data = PluginHelper.DataManager;
+        if (data is null)
+        {
+            return CommandOutcome.Rejected(command.Name, "the LaunchBox library is not loaded yet");
+        }
+
+        // GetGameById is case-sensitive and LaunchBox stores some ids in uppercase; try both forms,
+        // then fall back to comparing every game's id as a GUID.
+        var game = GameIds.LookupCandidates(command.GameId).Select(data.GetGameById).FirstOrDefault(g => g is not null)
+            ?? data.GetAllGames().FirstOrDefault(g => GameIds.Matches(g.Id, command.GameId));
         if (game is null)
         {
             return CommandOutcome.Rejected(command.Name, $"no game with id {id} in the LaunchBox library");
