@@ -120,12 +120,12 @@ end;
 function IsRunning(const Exe: String): Boolean;
 var
   Code: Integer;
-  Out: String;
+  ListFile: String;
   Lines: TArrayOfString;
 begin
-  Out := ExpandConstant('{tmp}\tasklist.txt');
-  Exec(ExpandConstant('{cmd}'), '/C tasklist /FI "IMAGENAME eq ' + Exe + '" /NH > "' + Out + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Result := LoadStringsFromFile(Out, Lines) and (GetArrayLength(Lines) > 0) and (Pos(Lowercase(Exe), Lowercase(Lines[GetArrayLength(Lines) - 1]) + Lowercase(Lines[0])) > 0);
+  ListFile := ExpandConstant('{tmp}\tasklist.txt');
+  Exec(ExpandConstant('{cmd}'), '/C tasklist /FI "IMAGENAME eq ' + Exe + '" /NH > "' + ListFile + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Result := LoadStringsFromFile(ListFile, Lines) and (GetArrayLength(Lines) > 0) and (Pos(Lowercase(Exe), Lowercase(Lines[GetArrayLength(Lines) - 1]) + Lowercase(Lines[0])) > 0);
 end;
 
 { LaunchBox and BigBox keep the plugin DLLs loaded, so they must be closed. }
