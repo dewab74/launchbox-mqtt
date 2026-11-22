@@ -9,8 +9,8 @@ namespace LaunchBoxMqtt.Core.Tests;
 
 public sealed class LaunchBoxBridgeTests : IAsyncDisposable
 {
-    private const string StateTopic = "launchbox/cocktail/state";
-    private const string AvailabilityTopic = "launchbox/cocktail/availability";
+    private const string StateTopic = "launchbox/arcade_pc/state";
+    private const string AvailabilityTopic = "launchbox/arcade_pc/availability";
 
     private static readonly BridgeOptions FastOptions = new()
     {
@@ -24,7 +24,7 @@ public sealed class LaunchBoxBridgeTests : IAsyncDisposable
     private readonly RecordingLog _log = new();
     private LaunchBoxBridge? _bridge;
 
-    private static BridgeSettings Settings => new() { Host = "broker.test", NodeName = "COCKTAIL" };
+    private static BridgeSettings Settings => new() { Host = "broker.test", NodeName = "Arcade PC" };
 
     public async ValueTask DisposeAsync()
     {

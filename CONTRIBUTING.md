@@ -54,3 +54,6 @@ which cannot go into CI.
 3. Run `scripts/release.sh X.Y.Z --tested-with <LaunchBox version> --dry-run`,
    read the notes, then run it without `--dry-run`. It tags `vX.Y.Z`, publishes
    the zip and its SHA256, then downloads them again to check.
+4. The `installer` workflow then builds `LaunchBoxMqtt-Setup-X.Y.Z.exe` from
+   that zip and attaches it to the release. Check it finished (Actions tab).
+   It can be re-run for a tag with "Run workflow".

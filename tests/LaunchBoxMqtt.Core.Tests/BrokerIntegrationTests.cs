@@ -19,8 +19,8 @@ namespace LaunchBoxMqtt.Core.Tests;
 /// </summary>
 public sealed class BrokerIntegrationTests : IAsyncLifetime
 {
-    private const string StateTopic = "launchbox/cocktail/state";
-    private const string AvailabilityTopic = "launchbox/cocktail/availability";
+    private const string StateTopic = "launchbox/arcade_pc/state";
+    private const string AvailabilityTopic = "launchbox/arcade_pc/availability";
 
     private readonly string _dir = Directory.CreateTempSubdirectory("lbmqtt-broker").FullName;
     private readonly List<IAsyncDisposable> _cleanup = [];
@@ -58,7 +58,7 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         await Eventually.True(() => seen.TryGetValue(StateTopic, out var s) && s.Contains("Galaga", StringComparison.Ordinal), "state retained");
 
         await Eventually.True(() => seen.Keys.Count(k => k.StartsWith("homeassistant/", StringComparison.Ordinal)) == DiscoveryBuilderCount, "all discovery configs retained");
-        var config = seen["homeassistant/sensor/launchbox_cocktail/now_playing/config"];
+        var config = seen["homeassistant/sensor/launchbox_arcade_pc/now_playing/config"];
         Assert.Equal(StateTopic, JsonElement.Parse(config).GetProperty("state_topic").GetString());
         Assert.Equal(DiscoveryBuilderCount, seen.Keys.Count(k => k.StartsWith("homeassistant/", StringComparison.Ordinal)));
         Assert.Equal(MqttProtocolVersion.V500, _connectProtocols.Last());
@@ -165,7 +165,7 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         // Left on the broker before the bridge connects, e.g. by a misconfigured automation.
         var publisher = await ConnectObserverAsync("publisher");
         await publisher.PublishAsync(new MqttApplicationMessageBuilder()
-            .WithTopic("launchbox/cocktail/command/exit_game").WithPayload("PRESS").WithRetainFlag(true)
+            .WithTopic("launchbox/arcade_pc/command/exit_game").WithPayload("PRESS").WithRetainFlag(true)
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce).Build(), TestContext.Current.CancellationToken);
 
         var handler = new RecordingCommandHandler();
@@ -178,7 +178,7 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         Assert.Empty(handler.Handled);
 
         await publisher.PublishAsync(new MqttApplicationMessageBuilder()
-            .WithTopic("launchbox/cocktail/command/launch_game").WithPayload("6f1c2a4e-0000-4000-8000-000000000001")
+            .WithTopic("launchbox/arcade_pc/command/launch_game").WithPayload("6f1c2a4e-0000-4000-8000-000000000001")
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce).Build(), TestContext.Current.CancellationToken);
         await Eventually.True(() => handler.Handled.Count == 1, "live command handled");
         Assert.IsType<LaunchBoxMqtt.Core.Commands.LaunchGameCommand>(handler.Handled.Single());
@@ -186,7 +186,7 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         // A retained command published while the bridge is subscribed is refused too (MQTT 5).
         await Task.Delay(3_100, TestContext.Current.CancellationToken); // past the minimum command interval
         await publisher.PublishAsync(new MqttApplicationMessageBuilder()
-            .WithTopic("launchbox/cocktail/command/exit_game").WithPayload("PRESS").WithRetainFlag(true)
+            .WithTopic("launchbox/arcade_pc/command/exit_game").WithPayload("PRESS").WithRetainFlag(true)
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce).Build(), TestContext.Current.CancellationToken);
         await Task.Delay(500, TestContext.Current.CancellationToken);
         Assert.Single(handler.Handled);
@@ -203,7 +203,7 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         var transport = new MqttNetTransport(Settings());
         _cleanup.Add(transport);
         await transport.ConnectAsync(CancellationToken.None);
-        await transport.PublishAsync(new OutboundMessage("launchbox/cocktail/artwork", string.Empty, Retain: true) { Binary = bytes }, CancellationToken.None);
+        await transport.PublishAsync(new OutboundMessage("launchbox/arcade_pc/artwork", string.Empty, Retain: true) { Binary = bytes }, CancellationToken.None);
 
         var received = new TaskCompletionSource<byte[]>();
         var client = new MqttClientFactory().CreateMqttClient();
@@ -214,7 +214,7 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         };
         await client.ConnectAsync(new MqttClientOptionsBuilder().WithTcpServer("localhost", _port).WithClientId("artwork-observer").Build(), TestContext.Current.CancellationToken);
         _cleanup.Add(new ClientCleanup(client));
-        await client.SubscribeAsync("launchbox/cocktail/artwork", cancellationToken: TestContext.Current.CancellationToken);
+        await client.SubscribeAsync("launchbox/arcade_pc/artwork", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(bytes, await received.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
     }
@@ -229,7 +229,7 @@ public sealed class BrokerIntegrationTests : IAsyncLifetime
         return client;
     }
 
-    private BridgeSettings Settings() => new() { Host = "localhost", Port = _port, NodeName = "COCKTAIL" };
+    private BridgeSettings Settings() => new() { Host = "localhost", Port = _port, NodeName = "Arcade PC" };
 
     private async Task StartBrokerAsync(bool rejectV5 = false, string? requiredPassword = null, X509Certificate2? tlsCertificate = null)
     {

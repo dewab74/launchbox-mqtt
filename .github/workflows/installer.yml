@@ -1,0 +1,71 @@
+# Builds LaunchBoxMqtt-Setup-<version>.exe from a published release's plugin
+# zip (CI cannot build the plugin itself: it needs LaunchBox's API DLL), and
+# attaches it to that release with its SHA256 and a provenance attestation.
+name: installer
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build the installer for, e.g. v0.5.0
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write # upload to the release
+      id-token: write # sign the provenance attestation
+      attestations: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          persist-credentials: false
+
+      - name: Download and verify the plugin zip
+        id: zip
+        shell: pwsh
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $zip = "launchbox-mqtt-$version.zip"
+          New-Item -ItemType Directory -Force dl | Out-Null
+          gh release download $env:TAG -R "${{ github.repository }}" --dir dl --pattern $zip --pattern "$zip.sha256"
+          $expected = ((Get-Content "dl/$zip.sha256" -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash "dl/$zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "$zip SHA256 is $actual, the release says $expected" }
+          Expand-Archive "dl/$zip" -DestinationPath unzipped
+          if (-not (Test-Path unzipped/LaunchBoxMqtt/LaunchBoxMqtt.Plugin.dll)) { throw 'LaunchBoxMqtt.Plugin.dll missing from the zip' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup not found at $iscc" }
+          & $iscc /Q "/DAppVersion=${{ steps.zip.outputs.version }}" "/DPluginDir=$PWD\unzipped\LaunchBoxMqtt" installer\LaunchBoxMqtt.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC exited $LASTEXITCODE" }
+          $setup = "artifacts/installer/LaunchBoxMqtt-Setup-${{ steps.zip.outputs.version }}.exe"
+          if (-not (Test-Path $setup)) { throw "No $setup" }
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          # LF, so `shasum -a 256 -c` works on macOS and Linux.
+          [IO.File]::WriteAllText("$PWD/$setup.sha256", "$hash  $(Split-Path $setup -Leaf)`n")
+
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: artifacts/installer/LaunchBoxMqtt-Setup-${{ steps.zip.outputs.version }}.exe
+
+      - name: Attach to the release
+        shell: pwsh
+        run: |
+          $setup = "artifacts/installer/LaunchBoxMqtt-Setup-${{ steps.zip.outputs.version }}.exe"
+          gh release upload $env:TAG $setup "$setup.sha256" --clobber -R "${{ github.repository }}"

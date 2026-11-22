@@ -7,12 +7,12 @@ public class TopicLayoutTests
     [Fact]
     public void Topics_follow_the_documented_layout()
     {
-        var topics = new TopicLayout("launchbox", "homeassistant", "cocktail");
+        var topics = new TopicLayout("launchbox", "homeassistant", "arcade_pc");
 
-        Assert.Equal("launchbox/cocktail/state", topics.StateTopic);
-        Assert.Equal("launchbox/cocktail/availability", topics.AvailabilityTopic);
-        Assert.Equal("launchbox_cocktail", topics.DeviceId);
-        Assert.Equal("homeassistant/sensor/launchbox_cocktail/now_playing/config", topics.DiscoveryTopic("sensor", "now_playing"));
+        Assert.Equal("launchbox/arcade_pc/state", topics.StateTopic);
+        Assert.Equal("launchbox/arcade_pc/availability", topics.AvailabilityTopic);
+        Assert.Equal("launchbox_arcade_pc", topics.DeviceId);
+        Assert.Equal("homeassistant/sensor/launchbox_arcade_pc/now_playing/config", topics.DiscoveryTopic("sensor", "now_playing"));
     }
 
     [Fact]

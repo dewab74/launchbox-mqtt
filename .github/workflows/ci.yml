@@ -32,3 +32,17 @@ jobs:
       - run: dotnet build LaunchBoxMqtt.slnx --no-restore -c Release -warnaserror
 
       - run: dotnet test --solution LaunchBoxMqtt.slnx --no-build -c Release
+
+      # The real installer is built from a release zip (installer.yml); this
+      # compiles the script against placeholder files so a broken .iss fails here.
+      - name: Compile the installer script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force fake/LaunchBoxMqtt | Out-Null
+          Set-Content fake/LaunchBoxMqtt/LaunchBoxMqtt.Plugin.dll 'placeholder'
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc /Q "/DAppVersion=0.0.0-ci" "/DPluginDir=$PWD\fake\LaunchBoxMqtt" installer\LaunchBoxMqtt.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC exited $LASTEXITCODE" }
+          if (-not (Test-Path artifacts/installer/LaunchBoxMqtt-Setup-0.0.0-ci.exe)) { throw 'no installer produced' }

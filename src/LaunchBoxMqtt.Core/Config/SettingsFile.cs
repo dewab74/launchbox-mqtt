@@ -30,7 +30,7 @@ public static class SettingsFile
 
     private static readonly HashSet<string> KnownKeys = new(StringComparer.Ordinal)
     {
-        "enabled", "host", "port", "tls", "caCertificatePath", "username", "password",
+        "enabled", "host", "port", "tls", "verifyCertificate", "caCertificatePath", "username", "password",
         "nodeName", "baseTopic", "discoveryPrefix", "discoveryEnabled", "commandsEnabled", "artworkEnabled", "artworkMaxWidth", "statsEnabled", "$comment",
     };
 
@@ -64,6 +64,7 @@ public static class SettingsFile
             Host = String(root, "host", path) ?? string.Empty,
             Port = Int(root, "port", path),
             UseTls = Bool(root, "tls", path) ?? false,
+            VerifyCertificate = Bool(root, "verifyCertificate", path) ?? true,
             CaCertificatePath = String(root, "caCertificatePath", path),
             Username = String(root, "username", path),
             NodeName = string.IsNullOrWhiteSpace(nodeName) ? defaultNodeName : nodeName,
@@ -111,6 +112,7 @@ public static class SettingsFile
             ["host"] = settings.Host,
             ["port"] = settings.EffectivePort,
             ["tls"] = settings.UseTls,
+            ["verifyCertificate"] = settings.VerifyCertificate,
             ["caCertificatePath"] = settings.CaCertificatePath,
             ["username"] = settings.Username,
             ["nodeName"] = settings.NodeName,
@@ -147,6 +149,7 @@ public static class SettingsFile
             ["host"] = string.Empty,
             ["port"] = BridgeSettings.DefaultPort,
             ["tls"] = false,
+            ["verifyCertificate"] = true,
             ["caCertificatePath"] = null,
             ["username"] = null,
             ["password"] = null,

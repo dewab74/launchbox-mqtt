@@ -5,7 +5,8 @@ namespace LaunchBoxMqtt.Core.Tests;
 public class NodeIdTests
 {
     [Theory]
-    [InlineData("COCKTAIL", "cocktail")]
+    [InlineData("ARCADE-PC", "arcade-pc")]
+    [InlineData("Arcade PC", "arcade_pc")]
     [InlineData("Arcade PC #2", "arcade_pc_2")]
     [InlineData("  den-pc  ", "den-pc")]
     [InlineData("kid's/room+pc", "kid_s_room_pc")]

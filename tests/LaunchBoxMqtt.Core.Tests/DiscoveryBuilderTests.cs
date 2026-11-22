@@ -10,9 +10,9 @@ namespace LaunchBoxMqtt.Core.Tests;
 
 public partial class DiscoveryBuilderTests
 {
-    private readonly TopicLayout _topics = new("launchbox", "homeassistant", "cocktail");
+    private readonly TopicLayout _topics = new("launchbox", "homeassistant", "arcade_pc");
 
-    private DiscoveryBuilder Builder => new(_topics, "COCKTAIL", "1.2.3");
+    private DiscoveryBuilder Builder => new(_topics, "Arcade PC", "1.2.3");
 
     [Fact]
     public void One_retained_config_per_entity_on_the_discovery_topic()
@@ -21,43 +21,43 @@ public partial class DiscoveryBuilderTests
 
         Assert.Equal(DiscoveryBuilder.Entities.Count + DiscoveryBuilder.CommandEntities.Count + DiscoveryBuilder.ArtworkEntities.Count + DiscoveryBuilder.StatsEntities.Count, configs.Count);
         Assert.All(configs, m => Assert.True(m.Retain));
-        Assert.Contains(configs, m => m.Topic == "homeassistant/sensor/launchbox_cocktail/now_playing/config");
-        Assert.Contains(configs, m => m.Topic == "homeassistant/binary_sensor/launchbox_cocktail/playing/config");
+        Assert.Contains(configs, m => m.Topic == "homeassistant/sensor/launchbox_arcade_pc/now_playing/config");
+        Assert.Contains(configs, m => m.Topic == "homeassistant/binary_sensor/launchbox_arcade_pc/playing/config");
         Assert.Equal(configs.Count, configs.Select(m => m.Topic).Distinct().Count());
     }
 
     [Fact]
     public void Every_config_shares_the_device_and_availability()
     {
-        foreach (var message in new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true, statsEnabled: true).BuildConfigs())
+        foreach (var message in new DiscoveryBuilder(_topics, "Arcade PC", "1.2.3", commandsEnabled: true, artworkEnabled: true, statsEnabled: true).BuildConfigs())
         {
             using var doc = JsonDocument.Parse(message.Payload);
             var root = doc.RootElement;
 
             if (root.TryGetProperty("image_topic", out var imageTopic))
             {
-                Assert.Equal("launchbox/cocktail/artwork", imageTopic.GetString());
+                Assert.Equal("launchbox/arcade_pc/artwork", imageTopic.GetString());
                 Assert.Equal("image/png", root.GetProperty("content_type").GetString());
             }
             else if (root.TryGetProperty("command_topic", out var commandTopic))
             {
-                Assert.StartsWith("launchbox/cocktail/command/", commandTopic.GetString(), StringComparison.Ordinal);
+                Assert.StartsWith("launchbox/arcade_pc/command/", commandTopic.GetString(), StringComparison.Ordinal);
                 Assert.False(root.GetProperty("retain").GetBoolean());
             }
             else
             {
                 var stats = DiscoveryBuilder.StatsEntities.Any(e => message.Topic.EndsWith($"/{e.ObjectId}/config", StringComparison.Ordinal));
-                Assert.Equal(stats ? "launchbox/cocktail/stats" : "launchbox/cocktail/state", root.GetProperty("state_topic").GetString());
+                Assert.Equal(stats ? "launchbox/arcade_pc/stats" : "launchbox/arcade_pc/state", root.GetProperty("state_topic").GetString());
             }
 
-            Assert.Equal("launchbox/cocktail/availability", root.GetProperty("availability_topic").GetString());
+            Assert.Equal("launchbox/arcade_pc/availability", root.GetProperty("availability_topic").GetString());
             Assert.Equal(Availability.Online, root.GetProperty("payload_available").GetString());
             Assert.Equal(Availability.Offline, root.GetProperty("payload_not_available").GetString());
-            Assert.StartsWith("launchbox_cocktail_", root.GetProperty("unique_id").GetString(), StringComparison.Ordinal);
+            Assert.StartsWith("launchbox_arcade_pc_", root.GetProperty("unique_id").GetString(), StringComparison.Ordinal);
 
             var device = root.GetProperty("device");
-            Assert.Equal("launchbox_cocktail", device.GetProperty("identifiers")[0].GetString());
-            Assert.Equal("LaunchBox (COCKTAIL)", device.GetProperty("name").GetString());
+            Assert.Equal("launchbox_arcade_pc", device.GetProperty("identifiers")[0].GetString());
+            Assert.Equal("LaunchBox (Arcade PC)", device.GetProperty("name").GetString());
             Assert.Equal("1.2.3", device.GetProperty("sw_version").GetString());
             Assert.Equal("launchbox-mqtt", root.GetProperty("origin").GetProperty("name").GetString());
         }
@@ -66,7 +66,7 @@ public partial class DiscoveryBuilderTests
     [Fact]
     public void Unique_ids_are_unique()
     {
-        var ids = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true, artworkEnabled: true, statsEnabled: true).BuildConfigs()
+        var ids = new DiscoveryBuilder(_topics, "Arcade PC", "1.2.3", commandsEnabled: true, artworkEnabled: true, statsEnabled: true).BuildConfigs()
             .Select(m => JsonElement.Parse(m.Payload).GetProperty("unique_id").GetString())
             .ToList();
         Assert.Equal(ids.Count, ids.Distinct().Count());
@@ -76,7 +76,7 @@ public partial class DiscoveryBuilderTests
     public void Attribute_entities_point_at_the_state_topic()
     {
         var nowPlaying = Builder.BuildConfig(DiscoveryBuilder.Entities.Single(e => e.ObjectId == "now_playing"));
-        Assert.Equal("launchbox/cocktail/state", nowPlaying["json_attributes_topic"]!.GetValue<string>());
+        Assert.Equal("launchbox/arcade_pc/state", nowPlaying["json_attributes_topic"]!.GetValue<string>());
         Assert.NotNull(nowPlaying["json_attributes_template"]);
     }
 
@@ -112,25 +112,25 @@ public partial class DiscoveryBuilderTests
     public void Command_entities_are_removed_while_commands_are_off()
     {
         var off = Builder.BuildConfigs();
-        var on = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", commandsEnabled: true).BuildConfigs();
+        var on = new DiscoveryBuilder(_topics, "Arcade PC", "1.2.3", commandsEnabled: true).BuildConfigs();
 
-        var exitTopic = "homeassistant/button/launchbox_cocktail/exit_game/config";
+        var exitTopic = "homeassistant/button/launchbox_arcade_pc/exit_game/config";
         Assert.Equal(string.Empty, off.Single(m => m.Topic == exitTopic).Payload);
         Assert.True(off.Single(m => m.Topic == exitTopic).Retain);
-        Assert.Equal("launchbox/cocktail/command/exit_game", JsonElement.Parse(on.Single(m => m.Topic == exitTopic).Payload).GetProperty("command_topic").GetString());
+        Assert.Equal("launchbox/arcade_pc/command/exit_game", JsonElement.Parse(on.Single(m => m.Topic == exitTopic).Payload).GetProperty("command_topic").GetString());
 
         var launch = JsonElement.Parse(on.Single(m => m.Topic.Contains("/text/", StringComparison.Ordinal)).Payload);
-        Assert.Equal("launchbox/cocktail/command/launch_game", launch.GetProperty("command_topic").GetString());
+        Assert.Equal("launchbox/arcade_pc/command/launch_game", launch.GetProperty("command_topic").GetString());
         Assert.Matches(launch.GetProperty("pattern").GetString()!, "6f1c2a4e-0000-4000-8000-000000000001");
     }
 
     [Fact]
     public void Artwork_entity_only_while_enabled()
     {
-        const string topic = "homeassistant/image/launchbox_cocktail/artwork/config";
+        const string topic = "homeassistant/image/launchbox_arcade_pc/artwork/config";
         Assert.Equal(string.Empty, Builder.BuildConfigs().Single(m => m.Topic == topic).Payload);
-        var on = new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", artworkEnabled: true).BuildConfigs().Single(m => m.Topic == topic);
-        Assert.Equal("launchbox/cocktail/artwork", JsonElement.Parse(on.Payload).GetProperty("image_topic").GetString());
+        var on = new DiscoveryBuilder(_topics, "Arcade PC", "1.2.3", artworkEnabled: true).BuildConfigs().Single(m => m.Topic == topic);
+        Assert.Equal("launchbox/arcade_pc/artwork", JsonElement.Parse(on.Payload).GetProperty("image_topic").GetString());
     }
 
     [Fact]
@@ -138,11 +138,11 @@ public partial class DiscoveryBuilderTests
     {
         foreach (var id in new[] { "achievements", "high_score" })
         {
-            var topic = $"homeassistant/sensor/launchbox_cocktail/{id}/config";
+            var topic = $"homeassistant/sensor/launchbox_arcade_pc/{id}/config";
             Assert.Equal(string.Empty, Builder.BuildConfigs().Single(m => m.Topic == topic).Payload);
-            var on = JsonElement.Parse(new DiscoveryBuilder(_topics, "COCKTAIL", "1.2.3", statsEnabled: true).BuildConfigs().Single(m => m.Topic == topic).Payload);
-            Assert.Equal("launchbox/cocktail/stats", on.GetProperty("state_topic").GetString());
-            Assert.Equal("launchbox/cocktail/stats", on.GetProperty("json_attributes_topic").GetString());
+            var on = JsonElement.Parse(new DiscoveryBuilder(_topics, "Arcade PC", "1.2.3", statsEnabled: true).BuildConfigs().Single(m => m.Topic == topic).Payload);
+            Assert.Equal("launchbox/arcade_pc/stats", on.GetProperty("state_topic").GetString());
+            Assert.Equal("launchbox/arcade_pc/stats", on.GetProperty("json_attributes_topic").GetString());
         }
     }
 

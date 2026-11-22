@@ -18,7 +18,7 @@ public sealed class SettingsFormTests : IDisposable
         [SettingsForm.CaCertificatePath] = "",
         [SettingsForm.Username] = "launchbox",
         [SettingsForm.Password] = "",
-        [SettingsForm.NodeName] = "COCKTAIL",
+        [SettingsForm.NodeName] = "Arcade PC",
         [SettingsForm.BaseTopic] = "launchbox",
         [SettingsForm.DiscoveryPrefix] = "homeassistant",
         [SettingsForm.DiscoveryEnabled] = "true",
@@ -131,9 +131,9 @@ public sealed class SettingsFormTests : IDisposable
         values[SettingsForm.Port] = "";
         values[SettingsForm.NodeName] = "";
         values[SettingsForm.BaseTopic] = "";
-        var s = SettingsForm.Parse(values, "COCKTAIL", hasStoredPassword: true).Settings!;
+        var s = SettingsForm.Parse(values, "Arcade PC", hasStoredPassword: true).Settings!;
         Assert.Null(s.CaCertificatePath);
-        Assert.Equal((1883, "COCKTAIL", "launchbox"), (s.EffectivePort, s.NodeName, s.BaseTopic));
+        Assert.Equal((1883, "Arcade PC", "launchbox"), (s.EffectivePort, s.NodeName, s.BaseTopic));
     }
 
     [Fact]

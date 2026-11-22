@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `LaunchBoxMqtt-Setup-<version>.exe`, an Inno Setup installer. The
+  `installer` workflow builds it from each release's zip and attaches it,
+  with its SHA256 and a provenance attestation. It asks for the LaunchBox
+  folder, refuses to run while LaunchBox or BigBox is open, and runs
+  silently (`/DIR=`, plus optional `/HOST=` … switches that write the
+  settings).
+- `verifyCertificate` (default `true`) and a matching checkbox in the
+  settings window. With TLS, turning it off accepts the broker's certificate
+  without checking it, for brokers with a self-signed certificate. The
+  connection is still encrypted, and the log line notes it.
+
+### Changed
+
+- Examples and tests use a device named "Arcade PC" (node id `arcade_pc`).
+
 ## [0.4.0] - 2026-11-21
 
 ### Added

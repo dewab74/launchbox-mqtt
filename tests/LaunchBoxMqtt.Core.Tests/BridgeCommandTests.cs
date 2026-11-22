@@ -8,8 +8,8 @@ namespace LaunchBoxMqtt.Core.Tests;
 public sealed class BridgeCommandTests : IAsyncDisposable
 {
     private const string GameId = "6f1c2a4e-0000-4000-8000-000000000001";
-    private const string Prefix = "launchbox/cocktail/command/";
-    private const string ResultTopic = "launchbox/cocktail/command_result";
+    private const string Prefix = "launchbox/arcade_pc/command/";
+    private const string ResultTopic = "launchbox/arcade_pc/command_result";
 
     private readonly FakeTransport _transport = new();
     private readonly RecordingLog _log = new();
@@ -40,7 +40,7 @@ public sealed class BridgeCommandTests : IAsyncDisposable
     public async Task Enabled_commands_subscribe_and_reach_the_handler()
     {
         await StartAsync(commandsEnabled: true);
-        Assert.Equal(["launchbox/cocktail/command/+"], _transport.Subscriptions);
+        Assert.Equal(["launchbox/arcade_pc/command/+"], _transport.Subscriptions);
 
         await _transport.Deliver(Prefix + "launch_game", GameId);
         await Eventually.True(() => Results().Count > 0, "result published");
@@ -113,7 +113,7 @@ public sealed class BridgeCommandTests : IAsyncDisposable
 
     private async Task StartAsync(bool commandsEnabled, TimeSpan? minInterval = null, TimeSpan? timeout = null)
     {
-        var settings = new BridgeSettings { Host = "broker.test", NodeName = "COCKTAIL", CommandsEnabled = commandsEnabled };
+        var settings = new BridgeSettings { Host = "broker.test", NodeName = "Arcade PC", CommandsEnabled = commandsEnabled };
         var options = new BridgeOptions
         {
             TickInterval = TimeSpan.FromMilliseconds(20),
@@ -123,7 +123,7 @@ public sealed class BridgeCommandTests : IAsyncDisposable
         };
         _bridge = new LaunchBoxBridge(settings, _transport, _log, "0.0.0-test", options: options, commands: _handler);
         _bridge.Start();
-        await Eventually.True(() => _transport.Published.Any(m => m.Topic == "launchbox/cocktail/availability"), "connected");
+        await Eventually.True(() => _transport.Published.Any(m => m.Topic == "launchbox/arcade_pc/availability"), "connected");
         if (commandsEnabled)
         {
             await Eventually.True(() => !_transport.Subscriptions.IsEmpty, "subscribed");

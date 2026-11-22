@@ -19,6 +19,13 @@ public sealed record BridgeSettings
     public bool UseTls { get; init; }
 
     /// <summary>
+    /// With TLS: check the broker's certificate (chain and host name). Turn off
+    /// only for a self-signed certificate you cannot give as <see cref="CaCertificatePath"/>:
+    /// still encrypted, but the broker is no longer authenticated.
+    /// </summary>
+    public bool VerifyCertificate { get; init; } = true;
+
+    /// <summary>
     /// PEM file with the CA certificate(s) that issued the broker's certificate,
     /// for brokers behind a private CA. Null uses the operating system's trust store.
     /// </summary>
@@ -111,6 +118,11 @@ public sealed record BridgeSettings
             errors.Add("A CA certificate was given but TLS is off.");
         }
 
+        if (CaCertificatePath is { Length: > 0 } && !VerifyCertificate)
+        {
+            errors.Add("A CA certificate was given but certificate verification is off.");
+        }
+
         if (CaCertificatePath is { Length: > 0 } path && !File.Exists(path))
         {
             errors.Add($"CA certificate file '{path}' does not exist.");
@@ -121,5 +133,5 @@ public sealed record BridgeSettings
 
     // The password must never reach a log line through record ToString().
     public override string ToString() =>
-        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")} commands={(CommandsEnabled ? "on" : "off")} artwork={(ArtworkEnabled ? ArtworkMaxWidth + "px" : "off")} stats={(StatsEnabled ? "on" : "off")}";
+        $"{(UseTls ? "mqtts" : "mqtt")}://{(string.IsNullOrEmpty(Username) ? string.Empty : Username + "@")}{Host}:{EffectivePort}{(UseTls && !VerifyCertificate ? " (certificate NOT verified)" : string.Empty)} node={NodeId} base={BaseTopic} discovery={(DiscoveryEnabled ? DiscoveryPrefix : "off")} commands={(CommandsEnabled ? "on" : "off")} artwork={(ArtworkEnabled ? ArtworkMaxWidth + "px" : "off")} stats={(StatsEnabled ? "on" : "off")}";
 }

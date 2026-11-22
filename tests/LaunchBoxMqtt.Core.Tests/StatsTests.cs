@@ -8,7 +8,7 @@ namespace LaunchBoxMqtt.Core.Tests;
 
 public sealed class StatsTests : IAsyncDisposable
 {
-    private const string StatsTopic = "launchbox/cocktail/stats";
+    private const string StatsTopic = "launchbox/arcade_pc/stats";
 
     private readonly FakeTransport _transport = new();
     private readonly RecordingLog _log = new();
@@ -136,7 +136,7 @@ public sealed class StatsTests : IAsyncDisposable
         var clear = Assert.Single(Stats());
         Assert.True(clear.Retain);
         Assert.Equal(string.Empty, clear.Payload);
-        Assert.Contains(_transport.Published, m => m.Topic.EndsWith("/sensor/launchbox_cocktail/high_score/config", StringComparison.Ordinal) && m.Payload.Length == 0);
+        Assert.Contains(_transport.Published, m => m.Topic.EndsWith("/sensor/launchbox_arcade_pc/high_score/config", StringComparison.Ordinal) && m.Payload.Length == 0);
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public sealed class StatsTests : IAsyncDisposable
 
     private async Task StartAsync(bool stats)
     {
-        var settings = new BridgeSettings { Host = "broker.test", NodeName = "COCKTAIL", StatsEnabled = stats };
+        var settings = new BridgeSettings { Host = "broker.test", NodeName = "Arcade PC", StatsEnabled = stats };
         var options = new BridgeOptions
         {
             TickInterval = TimeSpan.FromMilliseconds(20),
@@ -166,7 +166,7 @@ public sealed class StatsTests : IAsyncDisposable
         };
         _bridge = new LaunchBoxBridge(settings, _transport, _log, "0.0.0-test", options: options, stats: _source);
         _bridge.Start();
-        await Eventually.True(() => _transport.Published.Any(m => m.Topic == "launchbox/cocktail/availability"), "connected");
+        await Eventually.True(() => _transport.Published.Any(m => m.Topic == "launchbox/arcade_pc/availability"), "connected");
     }
 
     private List<OutboundMessage> Stats() => [.. _transport.Published.Where(m => m.Topic == StatsTopic)];

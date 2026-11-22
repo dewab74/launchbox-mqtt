@@ -29,6 +29,7 @@ public static class SettingsForm
     public const string Host = "host";
     public const string Port = "port";
     public const string Tls = "tls";
+    public const string VerifyCertificate = "verifyCertificate";
     public const string CaCertificatePath = "caCertificatePath";
     public const string Username = "username";
     public const string Password = "password"; // pragma: allowlist secret (a field id, not a secret)
@@ -51,6 +52,7 @@ public static class SettingsForm
             [Host] = settings.Host,
             [Port] = settings.EffectivePort.ToString(CultureInfo.InvariantCulture),
             [Tls] = Bool(settings.UseTls),
+            [VerifyCertificate] = Bool(settings.VerifyCertificate),
             [CaCertificatePath] = settings.CaCertificatePath ?? string.Empty,
             [Username] = settings.Username ?? string.Empty,
             [NodeName] = settings.NodeName,
@@ -80,6 +82,7 @@ public static class SettingsForm
 
         var enabled = GetBool(Enabled, false);
         var tls = GetBool(Tls, false);
+        var verify = GetBool(VerifyCertificate, true);
         int? port = null;
         var portText = Get(Port);
         if (portText.Length > 0)
@@ -114,7 +117,7 @@ public static class SettingsForm
         }
 
         var ca = Get(CaCertificatePath);
-        if (ca.Length > 0 && tls && !File.Exists(ca))
+        if (ca.Length > 0 && tls && verify && !File.Exists(ca))
         {
             errors[CaCertificatePath] = "This file does not exist.";
         }
@@ -150,8 +153,9 @@ public static class SettingsForm
             Host = host,
             Port = port,
             UseTls = tls,
+            VerifyCertificate = verify,
             // A CA file only means something with TLS; drop it rather than fail on a hidden field.
-            CaCertificatePath = tls && ca.Length > 0 ? ca : null,
+            CaCertificatePath = tls && verify && ca.Length > 0 ? ca : null,
             Username = username.Length > 0 ? username : null,
             NodeName = Get(NodeName) is { Length: > 0 } n ? n : defaultNodeName,
             BaseTopic = baseTopic,

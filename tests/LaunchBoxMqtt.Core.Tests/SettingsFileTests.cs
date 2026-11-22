@@ -15,14 +15,14 @@ public sealed class SettingsFileTests : IDisposable
     [Fact]
     public void Template_is_written_once_and_loads_as_disabled()
     {
-        Assert.True(SettingsFile.WriteTemplateIfMissing(FilePath, "COCKTAIL"));
+        Assert.True(SettingsFile.WriteTemplateIfMissing(FilePath, "Arcade PC"));
         Assert.False(SettingsFile.WriteTemplateIfMissing(FilePath, "OTHER"));
 
-        var content = SettingsFile.Load(FilePath, "COCKTAIL");
+        var content = SettingsFile.Load(FilePath, "Arcade PC");
 
         Assert.False(content.Enabled);
         Assert.Null(content.PlaintextPassword);
-        Assert.Equal("COCKTAIL", content.Settings.NodeName);
+        Assert.Equal("Arcade PC", content.Settings.NodeName);
         Assert.Contains(content.Settings.Validate(), e => e.Contains("host", StringComparison.OrdinalIgnoreCase));
         Assert.False(content.Settings.CommandsEnabled);
     }
@@ -88,7 +88,7 @@ public sealed class SettingsFileTests : IDisposable
     public void Blank_node_name_falls_back_to_the_machine_name()
     {
         File.WriteAllText(FilePath, """{ "host": "b", "nodeName": " " }""");
-        Assert.Equal("COCKTAIL", SettingsFile.Load(FilePath, "COCKTAIL").Settings.NodeName);
+        Assert.Equal("Arcade PC", SettingsFile.Load(FilePath, "Arcade PC").Settings.NodeName);
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public sealed class MqttNetTransport : IMqttTransport
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
         _availabilityTopic = settings.CreateTopicLayout().AvailabilityTopic;
-        _caBundle = settings.UseTls && !string.IsNullOrEmpty(settings.CaCertificatePath)
+        _caBundle = settings.UseTls && settings.VerifyCertificate && !string.IsNullOrEmpty(settings.CaCertificatePath)
             ? CertificateValidation.LoadCaBundle(settings.CaCertificatePath)
             : null;
         _client = new MqttClientFactory().CreateMqttClient();
@@ -169,7 +169,12 @@ public sealed class MqttNetTransport : IMqttTransport
             {
                 tls.UseTls();
                 tls.WithTargetHost(_settings.Host);
-                if (caBundle is not null)
+                if (!_settings.VerifyCertificate)
+                {
+                    // Encrypted but unauthenticated: the user turned verification off.
+                    tls.WithCertificateValidationHandler(_ => true);
+                }
+                else if (caBundle is not null)
                 {
                     tls.WithCertificateValidationHandler(args =>
                     {

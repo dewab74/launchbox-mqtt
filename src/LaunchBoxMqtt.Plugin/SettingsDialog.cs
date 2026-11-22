@@ -13,6 +13,7 @@ internal sealed class SettingsDialog : Form
     private readonly TextBox _host = new() { Width = 320 };
     private readonly NumericUpDown _port = new() { Minimum = 1, Maximum = 65535, Width = 100 };
     private readonly CheckBox _tls = new() { Text = "Use TLS", AutoSize = true };
+    private readonly CheckBox _verify = new() { Text = "Verify the broker's certificate (turn off only for a self-signed one)", AutoSize = true, Checked = true };
     private readonly TextBox _ca = new() { Width = 260, PlaceholderText = "Blank = Windows' trusted roots" };
     private readonly Button _browse = new() { Text = "Browse…", AutoSize = true };
     private readonly TextBox _username = new() { Width = 320 };
@@ -66,6 +67,7 @@ internal sealed class SettingsDialog : Form
             [SettingsForm.Host] = _host,
             [SettingsForm.Port] = _port,
             [SettingsForm.Tls] = _tls,
+            [SettingsForm.VerifyCertificate] = _verify,
             [SettingsForm.CaCertificatePath] = _ca,
             [SettingsForm.Username] = _username,
             [SettingsForm.Password] = _password,
@@ -103,6 +105,7 @@ internal sealed class SettingsDialog : Form
         Row("Host", _host);
         Row("Port", _port);
         Row(string.Empty, _tls);
+        Row(string.Empty, _verify);
         Row("CA certificate (PEM)", caRow);
         Row("Username", _username);
         Row("Password", _password);
@@ -124,6 +127,7 @@ internal sealed class SettingsDialog : Form
         Controls.Add(grid);
 
         _tls.CheckedChanged += (_, _) => UpdateTlsFields();
+        _verify.CheckedChanged += (_, _) => UpdateTlsFields();
         _artwork.CheckedChanged += (_, _) => _artworkWidth.Enabled = _artwork.Checked;
         _browse.Click += (_, _) => BrowseForCa();
         _test.Click += async (_, _) => await RunAsync(SettingsActions.TestAsync, closeOnSuccess: false).ConfigureAwait(true);
@@ -154,6 +158,7 @@ internal sealed class SettingsDialog : Form
             _host.Text = V(SettingsForm.Host);
             _port.Value = int.TryParse(V(SettingsForm.Port), NumberStyles.None, CultureInfo.InvariantCulture, out var port) ? port : 1883;
             _tls.Checked = V(SettingsForm.Tls) == "true";
+            _verify.Checked = V(SettingsForm.VerifyCertificate) != "false";
             _ca.Text = V(SettingsForm.CaCertificatePath);
             _username.Text = V(SettingsForm.Username);
             _password.PlaceholderText = hasPassword ? "Saved. Leave blank to keep it." : "Kept in LaunchBox's secret store";
@@ -224,6 +229,7 @@ internal sealed class SettingsDialog : Form
         [SettingsForm.Host] = _host.Text,
         [SettingsForm.Port] = ((int)_port.Value).ToString(CultureInfo.InvariantCulture),
         [SettingsForm.Tls] = _tls.Checked ? "true" : "false",
+        [SettingsForm.VerifyCertificate] = _verify.Checked ? "true" : "false",
         [SettingsForm.CaCertificatePath] = _ca.Text,
         [SettingsForm.Username] = _username.Text,
         [SettingsForm.Password] = _password.Text,
@@ -239,8 +245,9 @@ internal sealed class SettingsDialog : Form
 
     private void UpdateTlsFields()
     {
-        _ca.Enabled = _tls.Checked;
-        _browse.Enabled = _tls.Checked;
+        _verify.Enabled = _tls.Checked;
+        _ca.Enabled = _tls.Checked && _verify.Checked;
+        _browse.Enabled = _tls.Checked && _verify.Checked;
     }
 
     private void BrowseForCa()

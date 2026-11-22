@@ -2,6 +2,7 @@
 
 [![build and test](https://github.com/dewab74/launchbox-mqtt/actions/workflows/ci.yml/badge.svg)](https://github.com/dewab74/launchbox-mqtt/actions/workflows/ci.yml)
 [![pre-commit backstop](https://github.com/dewab74/launchbox-mqtt/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/dewab74/launchbox-mqtt/actions/workflows/pre-commit.yml)
+[![installer](https://github.com/dewab74/launchbox-mqtt/actions/workflows/installer.yml/badge.svg)](https://github.com/dewab74/launchbox-mqtt/actions/workflows/installer.yml)
 
 A [LaunchBox / BigBox](https://www.launchbox-app.com/) plugin that publishes
 what your arcade or game PC is doing to MQTT, with
@@ -26,7 +27,8 @@ Not affiliated with or endorsed by Unbroken Software, the makers of LaunchBox.
 
 - LaunchBox / BigBox 14.x on Windows (developed against 14.1.0.5, .NET 10).
 - An MQTT broker (Mosquitto, the Home Assistant Mosquitto add-on, EMQX, ...),
-  MQTT 5 or 3.1.1, optionally with TLS.
+  MQTT 5 or 3.1.1, optionally with TLS (certificate verification can be
+  turned off for a self-signed broker).
 - Home Assistant with the MQTT integration, if you want the auto-created device.
 
 ## Home Assistant entities
@@ -130,8 +132,8 @@ Home Assistant example: relaunch the last game.
 ```yaml
 action: mqtt.publish
 data:
-  topic: launchbox/cocktail/command/launch_game
-  payload: "{{ state_attr('sensor.launchbox_cocktail_last_played', 'id') }}"
+  topic: launchbox/arcade_pc/command/launch_game
+  payload: "{{ state_attr('sensor.launchbox_arcade_pc_last_played', 'id') }}"
 ```
 
 A toast in Big Box is not possible with the LaunchBox 14.1 plugin API (its
@@ -140,15 +142,15 @@ notification service is LaunchBox-only), so there is no notify command.
 ## Topics
 
 With the defaults (base topic `launchbox`, discovery prefix `homeassistant`)
-and a PC named `COCKTAIL` (node id `cocktail`):
+and a device named `Arcade PC` (node id `arcade_pc`):
 
 | Topic | Retained | Payload |
 | --- | --- | --- |
-| `launchbox/cocktail/state` | yes | JSON state document, below |
-| `launchbox/cocktail/availability` | yes | `online` / `offline` |
-| `launchbox/cocktail/artwork` | yes | PNG bytes of the current game's artwork (when enabled) |
-| `launchbox/cocktail/stats` | yes | JSON: the last game's achievements and this PC's MAME high score (when enabled) |
-| `homeassistant/<component>/launchbox_cocktail/<object>/config` | yes | Discovery configs |
+| `launchbox/arcade_pc/state` | yes | JSON state document, below |
+| `launchbox/arcade_pc/availability` | yes | `online` / `offline` |
+| `launchbox/arcade_pc/artwork` | yes | PNG bytes of the current game's artwork (when enabled) |
+| `launchbox/arcade_pc/stats` | yes | JSON: the last game's achievements and this PC's MAME high score (when enabled) |
+| `homeassistant/<component>/launchbox_arcade_pc/<object>/config` | yes | Discovery configs |
 
 The node id is the PC name, lower-cased, with anything outside `a-z 0-9 _ -`
 replaced by `_`.
@@ -191,6 +193,38 @@ minutes.
 
 ## Install
 
+### With the installer
+
+Download `LaunchBoxMqtt-Setup-<version>.exe` from
+[GitHub Releases](https://github.com/dewab74/launchbox-mqtt/releases), close
+LaunchBox and BigBox, and run it. Choose your LaunchBox folder (the one with
+`LaunchBox.exe`), and it puts the plugin in `LaunchBox\Plugins\LaunchBoxMqtt\`.
+Then configure it in LaunchBox (below). Uninstall from Windows' Installed
+apps. The installer isn't code-signed, so SmartScreen may ask you to confirm.
+Check it against its `.sha256`, or with
+`gh attestation verify LaunchBoxMqtt-Setup-<version>.exe -R dewab74/launchbox-mqtt`.
+
+It also runs silently, and can write the settings for you:
+
+```powershell
+.\LaunchBoxMqtt-Setup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\LaunchBox" `
+  /HOST=homeassistant.local /USERNAME=launchbox /PASSWORDFILE=C:\temp\mqtt.txt /NODENAME="Arcade PC"
+```
+
+| Switch | Default | Meaning |
+| --- | --- | --- |
+| `/DIR=` | `%USERPROFILE%\LaunchBox`, or `C:\LaunchBox` | LaunchBox folder |
+| `/HOST=` | none | Broker host. Writes the settings and enables the plugin; without it, existing settings are kept |
+| `/PORT=`, `/TLS=1`, `/VERIFY=0`, `/CAFILE=` | `1883` (`8883` with TLS), off, on, none | Broker connection; `/VERIFY=0` skips certificate checks (self-signed brokers) |
+| `/USERNAME=`, `/PASSWORDFILE=` (or `/PASSWORD=`) | none | Credentials. LaunchBox moves the password into its secret store on its next start, and the file is deleted |
+| `/NODENAME=` | the PC name | Device name in Home Assistant |
+| `/COMMANDS=1`, `/ARTWORK=1`, `/STATS=1` | off | Opt-in features |
+
+LaunchBox and BigBox must be closed; if either is running, setup stops with
+exit code 7.
+
+### By hand
+
 Download `launchbox-mqtt-<version>.zip` and its `.sha256` from
 [GitHub Releases](https://github.com/dewab74/launchbox-mqtt/releases), then:
 
@@ -230,10 +264,11 @@ start.
   "host": "homeassistant.local",
   "port": 8883,
   "tls": true,
+  "verifyCertificate": true,
   "caCertificatePath": "C:\\LaunchBox\\Local\\Plugins\\.data\\LaunchBoxMqtt\\files\\ca.pem",
   "username": "launchbox",
   "password": "<your MQTT password>",
-  "nodeName": "COCKTAIL",
+  "nodeName": "Arcade PC",
   "baseTopic": "launchbox",
   "discoveryPrefix": "homeassistant",
   "discoveryEnabled": true
@@ -246,6 +281,7 @@ start.
 | `host` | required | Broker host name |
 | `port` | 1883, or 8883 with TLS | |
 | `tls` | `false` | |
+| `verifyCertificate` | `true` | With TLS, check the broker's certificate (chain and host name). Set `false` only for a self-signed certificate you can't give as `caCertificatePath`: still encrypted, but the broker is no longer authenticated, and the log line says so |
 | `caCertificatePath` | OS trust store | PEM file for brokers with a private CA (may hold several certificates). The host name is still checked |
 | `username` / `password` | none | See below |
 | `nodeName` | the PC name | Shown in Home Assistant; normalised into the node id |

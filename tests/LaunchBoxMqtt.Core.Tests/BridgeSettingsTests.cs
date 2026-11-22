@@ -4,7 +4,7 @@ namespace LaunchBoxMqtt.Core.Tests;
 
 public class BridgeSettingsTests
 {
-    private static BridgeSettings Valid => new() { Host = "broker.lan", NodeName = "COCKTAIL" };
+    private static BridgeSettings Valid => new() { Host = "broker.lan", NodeName = "Arcade PC" };
 
     [Fact]
     public void Defaults_are_valid()
@@ -12,8 +12,8 @@ public class BridgeSettingsTests
         Assert.Empty(Valid.Validate());
         Assert.Equal(1883, Valid.EffectivePort);
         Assert.Equal(8883, (Valid with { UseTls = true }).EffectivePort);
-        Assert.Equal("cocktail", Valid.NodeId);
-        Assert.Equal("launchbox-mqtt-cocktail", Valid.ClientId);
+        Assert.Equal("arcade_pc", Valid.NodeId);
+        Assert.Equal("launchbox-mqtt-arcade_pc", Valid.ClientId);
     }
 
     [Fact]

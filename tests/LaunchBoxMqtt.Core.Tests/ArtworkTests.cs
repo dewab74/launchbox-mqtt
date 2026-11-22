@@ -7,7 +7,7 @@ namespace LaunchBoxMqtt.Core.Tests;
 
 public sealed class ArtworkTests : IAsyncDisposable
 {
-    private const string ArtworkTopic = "launchbox/cocktail/artwork";
+    private const string ArtworkTopic = "launchbox/arcade_pc/artwork";
 
     private readonly FakeTransport _transport = new();
     private readonly RecordingLog _log = new();
@@ -96,7 +96,7 @@ public sealed class ArtworkTests : IAsyncDisposable
         Assert.True(clear.Retain);
         Assert.Null(clear.Binary);
         Assert.Equal(string.Empty, clear.Payload);
-        Assert.Contains(_transport.Published, m => m.Topic.EndsWith("/image/launchbox_cocktail/artwork/config", StringComparison.Ordinal) && m.Payload.Length == 0);
+        Assert.Contains(_transport.Published, m => m.Topic.EndsWith("/image/launchbox_arcade_pc/artwork/config", StringComparison.Ordinal) && m.Payload.Length == 0);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class ArtworkTests : IAsyncDisposable
 
     private async Task StartAsync(bool artwork)
     {
-        var settings = new BridgeSettings { Host = "broker.test", NodeName = "COCKTAIL", ArtworkEnabled = artwork, ArtworkMaxWidth = 640 };
+        var settings = new BridgeSettings { Host = "broker.test", NodeName = "Arcade PC", ArtworkEnabled = artwork, ArtworkMaxWidth = 640 };
         var options = new BridgeOptions
         {
             TickInterval = TimeSpan.FromMilliseconds(20),
@@ -125,7 +125,7 @@ public sealed class ArtworkTests : IAsyncDisposable
         };
         _bridge = new LaunchBoxBridge(settings, _transport, _log, "0.0.0-test", options: options, artwork: _source);
         _bridge.Start();
-        await Eventually.True(() => _transport.Published.Any(m => m.Topic == "launchbox/cocktail/availability"), "connected");
+        await Eventually.True(() => _transport.Published.Any(m => m.Topic == "launchbox/arcade_pc/availability"), "connected");
     }
 
     private List<OutboundMessage> Artwork() => [.. _transport.Published.Where(m => m.Topic == ArtworkTopic)];
