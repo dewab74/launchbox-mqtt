@@ -21,6 +21,9 @@ repos:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
+        # NuGet writes packages.lock.json without a final newline; Dependabot
+        # PRs regenerate them, so fixing them here only fails those PRs.
+        exclude: (^|/)packages\.lock\.json$
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: check-yaml
