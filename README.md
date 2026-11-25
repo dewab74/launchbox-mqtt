@@ -8,6 +8,9 @@ A [LaunchBox / BigBox](https://www.launchbox-app.com/) plugin that publishes
 what your arcade or game PC is doing to MQTT, with
 [Home Assistant MQTT discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery).
 
+Why I built it, on my blog:
+[My arcade cabinet never slept](https://danielwhicker.com/2026/11/arcade-cabinet-home-assistant/).
+
 Install it, enter your broker details, and a **LaunchBox (&lt;PC name&gt;)**
 device appears in Home Assistant with "Now playing", "Playing", platform,
 BigBox and attract-mode entities, all without any YAML. It is event-driven:
